@@ -52,6 +52,20 @@ $(ASAN_OBJECTS): %.asan.o: %.c $(HEADERS)
 	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -fsanitize=address $(GTK_CFLAGS) -c $< -o $@
 
 # =============================================
+# Tests (fuera de la entrega)
+# ---------------------------------------------
+TEST_DIR = tests
+TEST_MODEL = test_model
+MODEL_SOURCES = $(SRC_DIR)/fraction.c $(SRC_DIR)/problem.c
+
+# Compila y corre las pruebas del modelo (sin GTK)
+test: $(TEST_MODEL)
+	./$(TEST_MODEL)
+
+$(TEST_MODEL): $(TEST_DIR)/test_model.c $(MODEL_SOURCES) $(HEADERS)
+	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -I$(SRC_DIR) $(TEST_DIR)/test_model.c $(MODEL_SOURCES) -o $@
+
+# =============================================
 # Cleanup
 # ---------------------------------------------
 
@@ -60,7 +74,7 @@ $(ASAN_OBJECTS): %.asan.o: %.c $(HEADERS)
 
 # Deja la carpeta sin ejecutables, objetos ni archivos auxiliares de LaTeX
 clean:
-	rm -f $(SRC_DIR)/*.o $(TARGET) $(TARGET)_debug $(TARGET)_asan
+	rm -f $(SRC_DIR)/*.o $(TARGET) $(TARGET)_debug $(TARGET)_asan $(TEST_MODEL)
 	rm -f $(OUTPUT_DIR)/*.aux $(OUTPUT_DIR)/*.log
 
-.PHONY: all debug asan clean
+.PHONY: all debug asan test clean

@@ -59,3 +59,15 @@ desktop.ini
 # Variables de entorno
 # ---------------------------------------------
 .env
+
+# =============================================
+# Documentos de trabajo (el README se agregara despues)
+# ---------------------------------------------
+*.md
+
+# =============================================
+# Ejecutables del proyecto
+# ---------------------------------------------
+simplex
+simplex_debug
+simplex_asan

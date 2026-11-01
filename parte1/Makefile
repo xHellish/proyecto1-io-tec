@@ -56,14 +56,20 @@ $(ASAN_OBJECTS): %.asan.o: %.c $(HEADERS)
 # ---------------------------------------------
 TEST_DIR = tests
 TEST_MODEL = test_model
+TEST_SIMPLEX = test_simplex
 MODEL_SOURCES = $(SRC_DIR)/fraction.c $(SRC_DIR)/problem.c
+ENGINE_SOURCES = $(MODEL_SOURCES) $(SRC_DIR)/simplex.c
 
-# Compila y corre las pruebas del modelo (sin GTK)
-test: $(TEST_MODEL)
+# Compila y corre las pruebas del modelo y del motor (sin GTK)
+test: $(TEST_MODEL) $(TEST_SIMPLEX)
 	./$(TEST_MODEL)
+	./$(TEST_SIMPLEX)
 
 $(TEST_MODEL): $(TEST_DIR)/test_model.c $(MODEL_SOURCES) $(HEADERS)
 	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -I$(SRC_DIR) $(TEST_DIR)/test_model.c $(MODEL_SOURCES) -o $@
+
+$(TEST_SIMPLEX): $(TEST_DIR)/test_simplex.c $(ENGINE_SOURCES) $(HEADERS)
+	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -I$(SRC_DIR) $(TEST_DIR)/test_simplex.c $(ENGINE_SOURCES) -o $@
 
 # =============================================
 # Cleanup
@@ -74,7 +80,7 @@ $(TEST_MODEL): $(TEST_DIR)/test_model.c $(MODEL_SOURCES) $(HEADERS)
 
 # Deja la carpeta sin ejecutables, objetos ni archivos auxiliares de LaTeX
 clean:
-	rm -f $(SRC_DIR)/*.o $(TARGET) $(TARGET)_debug $(TARGET)_asan $(TEST_MODEL)
+	rm -f $(SRC_DIR)/*.o $(TARGET) $(TARGET)_debug $(TARGET)_asan $(TEST_MODEL) $(TEST_SIMPLEX)
 	rm -f $(OUTPUT_DIR)/*.aux $(OUTPUT_DIR)/*.log
 
 .PHONY: all debug asan test clean

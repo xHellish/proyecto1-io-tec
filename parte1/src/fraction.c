@@ -82,7 +82,7 @@ static FractionStatus append_digit(long long *value, int digit) {
 
 // Lee una fraccion escrita como texto; el texto completo debe ser un numero valido
 FractionStatus fraction_parse(const char *text, Fraction *result) {
-    // 1. Recortar los espacios del inicio y del final
+    // Recortar los espacios del inicio y del final
     const char *cursor = text;
     while (isspace((unsigned char)*cursor)) {
         cursor++;
@@ -95,7 +95,7 @@ FractionStatus fraction_parse(const char *text, Fraction *result) {
         return FRACTION_ERROR_EMPTY_TEXT;
     }
 
-    // 2. Signo opcional
+    // Signo opcional
     int is_negative = 0;
     if (*cursor == '-') {
         is_negative = 1;
@@ -104,7 +104,7 @@ FractionStatus fraction_parse(const char *text, Fraction *result) {
         cursor++;
     }
 
-    // 3. Digitos de la parte entera (todos los digitos se acumulan en el numerador)
+    // Digitos de la parte entera (todos los digitos se acumulan en el numerador)
     long long numerator = 0;
     int integer_digit_count = 0;
     while (cursor < end && isdigit((unsigned char)*cursor)) {
@@ -116,7 +116,7 @@ FractionStatus fraction_parse(const char *text, Fraction *result) {
         cursor++;
     }
 
-    // 4. Entero simple: "3"
+    // Entero simple: "3"
     if (cursor == end) {
         if (integer_digit_count == 0) {
             return FRACTION_ERROR_INVALID_FORMAT;
@@ -127,7 +127,7 @@ FractionStatus fraction_parse(const char *text, Fraction *result) {
         return fraction_make(numerator, 1, result);
     }
 
-    // 5. Fraccion "a/b": ambos lados son enteros sin signo
+    // Fraccion "a/b": ambos lados son enteros sin signo
     if (*cursor == '/') {
         if (integer_digit_count == 0) {
             return FRACTION_ERROR_INVALID_FORMAT;
@@ -152,7 +152,7 @@ FractionStatus fraction_parse(const char *text, Fraction *result) {
         return fraction_make(numerator, denominator, result);
     }
 
-    // 6. Decimal "a.b" o "a,b": se necesita al menos un digito despues del separador
+    // Decimal "a.b" o "a,b": se necesita al menos un digito despues del separador
     if (*cursor == '.' || *cursor == ',') {
         cursor++;
         long long denominator = 1;
@@ -178,7 +178,7 @@ FractionStatus fraction_parse(const char *text, Fraction *result) {
         return fraction_make(numerator, denominator, result);
     }
 
-    // 7. Cualquier otro caracter (letras, notacion cientifica, espacios en medio) es invalido
+    // Cualquier otro caracter (letras, notacion cientifica, espacios en medio) es invalido
     return FRACTION_ERROR_INVALID_FORMAT;
 }
 

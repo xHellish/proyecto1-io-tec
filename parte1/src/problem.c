@@ -65,19 +65,19 @@ static void write_indexed_name(char letter, int index, char *buffer, size_t buff
 
 // Deja el problema con los valores por defecto
 void problem_init(Problem *problem) {
-    // 1. Limpiar todo y fijar valores generales
+    // Limpiar todo y fijar valores generales
     memset(problem, 0, sizeof(Problem));
     problem->objective_type = OBJECTIVE_MAXIMIZE;
     problem->variable_count = MIN_VARIABLES;
     problem->constraint_count = MIN_CONSTRAINTS;
 
-    // 2. Nombres por defecto y objetivo en cero
+    // Nombres por defecto y objetivo en cero
     for (int variable = 0; variable < MAX_VARIABLES; variable++) {
         problem_default_variable_name(variable, problem->variable_names[variable], MAX_NAME_LENGTH);
         problem->objective[variable] = fraction_from_int(0);
     }
 
-    // 3. Restricciones <= con coeficientes y lado derecho en cero
+    // Restricciones <= con coeficientes y lado derecho en cero
     for (int constraint = 0; constraint < MAX_CONSTRAINTS; constraint++) {
         problem->constraint_types[constraint] = CONSTRAINT_LESS_EQUAL;
         problem->right_hand_sides[constraint] = fraction_from_int(0);
@@ -131,7 +131,7 @@ void problem_slack_name(int index, char *buffer, size_t buffer_size) {
 ProblemError problem_validate(const Problem *problem, char *message, size_t message_size) {
     message[0] = '\0';
 
-    // 1. Cantidades de variables y restricciones
+    // Cantidades de variables y restricciones
     if (problem->variable_count < MIN_VARIABLES || problem->variable_count > MAX_VARIABLES) {
         snprintf(message, message_size, "The number of variables must be between %d and %d.",
                  MIN_VARIABLES, MAX_VARIABLES);
@@ -143,13 +143,13 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
         return PROBLEM_ERROR_CONSTRAINT_COUNT;
     }
 
-    // 2. Nombre del problema
+    // Nombre del problema
     if (is_blank(problem->name)) {
         snprintf(message, message_size, "The problem name is empty.");
         return PROBLEM_ERROR_EMPTY_PROBLEM_NAME;
     }
 
-    // 3. Nombres de variables: ninguno vacio
+    // Nombres de variables: ninguno vacio
     for (int variable = 0; variable < problem->variable_count; variable++) {
         if (is_blank(problem->variable_names[variable])) {
             snprintf(message, message_size, "The name of variable %d is empty.", variable + 1);
@@ -157,7 +157,7 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
         }
     }
 
-    // 4. Nombres de variables: ninguno repetido (sin contar espacios en los extremos)
+    // Nombres de variables: ninguno repetido (sin contar espacios en los extremos)
     char first_name[MAX_NAME_LENGTH];
     char second_name[MAX_NAME_LENGTH];
     for (int first = 0; first < problem->variable_count; first++) {
@@ -172,7 +172,7 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
         }
     }
 
-    // 5. Nombres de variables: ninguno igual al de una holgura
+    // Nombres de variables: ninguno igual al de una holgura
     char slack_name[NAME_BUFFER_SIZE];
     for (int variable = 0; variable < problem->variable_count; variable++) {
         trim_into(problem->variable_names[variable], first_name, MAX_NAME_LENGTH);
@@ -187,7 +187,7 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
         }
     }
 
-    // 6. Lados derechos: ninguno negativo
+    // Lados derechos: ninguno negativo
     for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
         if (fraction_sign(problem->right_hand_sides[constraint]) < 0) {
             snprintf(message, message_size, "The right-hand side of constraint %d is negative.",

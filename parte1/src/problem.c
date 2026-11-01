@@ -133,26 +133,26 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
 
     // Cantidades de variables y restricciones
     if (problem->variable_count < MIN_VARIABLES || problem->variable_count > MAX_VARIABLES) {
-        snprintf(message, message_size, "The number of variables must be between %d and %d.",
+        snprintf(message, message_size, "La cantidad de variables debe estar entre %d y %d.",
                  MIN_VARIABLES, MAX_VARIABLES);
         return PROBLEM_ERROR_VARIABLE_COUNT;
     }
     if (problem->constraint_count < MIN_CONSTRAINTS || problem->constraint_count > MAX_CONSTRAINTS) {
-        snprintf(message, message_size, "The number of constraints must be between %d and %d.",
+        snprintf(message, message_size, "La cantidad de restricciones debe estar entre %d y %d.",
                  MIN_CONSTRAINTS, MAX_CONSTRAINTS);
         return PROBLEM_ERROR_CONSTRAINT_COUNT;
     }
 
     // Nombre del problema
     if (is_blank(problem->name)) {
-        snprintf(message, message_size, "The problem name is empty.");
+        snprintf(message, message_size, "Falta el nombre del problema.");
         return PROBLEM_ERROR_EMPTY_PROBLEM_NAME;
     }
 
     // Nombres de variables: ninguno vacio
     for (int variable = 0; variable < problem->variable_count; variable++) {
         if (is_blank(problem->variable_names[variable])) {
-            snprintf(message, message_size, "The name of variable %d is empty.", variable + 1);
+            snprintf(message, message_size, "Falta el nombre de la variable %d.", variable + 1);
             return PROBLEM_ERROR_EMPTY_VARIABLE_NAME;
         }
     }
@@ -165,7 +165,7 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
         for (int second = first + 1; second < problem->variable_count; second++) {
             trim_into(problem->variable_names[second], second_name, MAX_NAME_LENGTH);
             if (strcmp(first_name, second_name) == 0) {
-                snprintf(message, message_size, "Variables %d and %d have the same name: %s.",
+                snprintf(message, message_size, "Las variables %d y %d tienen el mismo nombre: %s.",
                          first + 1, second + 1, first_name);
                 return PROBLEM_ERROR_DUPLICATE_VARIABLE_NAME;
             }
@@ -180,7 +180,7 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
             problem_slack_name(slack, slack_name, NAME_BUFFER_SIZE);
             if (strcmp(first_name, slack_name) == 0) {
                 snprintf(message, message_size,
-                         "The name of variable %d (%s) is reserved for a slack variable.",
+                         "El nombre de la variable %d (%s) está reservado para una holgura.",
                          variable + 1, first_name);
                 return PROBLEM_ERROR_SLACK_NAME_CONFLICT;
             }
@@ -190,7 +190,7 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
     // Lados derechos: ninguno negativo
     for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
         if (fraction_sign(problem->right_hand_sides[constraint]) < 0) {
-            snprintf(message, message_size, "The right-hand side of constraint %d is negative.",
+            snprintf(message, message_size, "El lado derecho de la restricción %d es negativo.",
                      constraint + 1);
             return PROBLEM_ERROR_NEGATIVE_RIGHT_HAND_SIDE;
         }
@@ -203,25 +203,25 @@ ProblemError problem_validate(const Problem *problem, char *message, size_t mess
 const char *problem_error_message(ProblemError error) {
     switch (error) {
     case PROBLEM_OK:
-        return "No error.";
+        return "Sin error.";
     case PROBLEM_ERROR_VARIABLE_COUNT:
-        return "The number of variables is out of range.";
+        return "La cantidad de variables está fuera de rango.";
     case PROBLEM_ERROR_CONSTRAINT_COUNT:
-        return "The number of constraints is out of range.";
+        return "La cantidad de restricciones está fuera de rango.";
     case PROBLEM_ERROR_NAME_TOO_LONG:
-        return "The name is too long.";
+        return "El nombre es demasiado largo.";
     case PROBLEM_ERROR_INDEX_OUT_OF_RANGE:
-        return "The variable position is out of range.";
+        return "La posición de la variable está fuera de rango.";
     case PROBLEM_ERROR_EMPTY_PROBLEM_NAME:
-        return "The problem name is empty.";
+        return "Falta el nombre del problema.";
     case PROBLEM_ERROR_EMPTY_VARIABLE_NAME:
-        return "A variable name is empty.";
+        return "Falta el nombre de una variable.";
     case PROBLEM_ERROR_DUPLICATE_VARIABLE_NAME:
-        return "Two variables have the same name.";
+        return "Dos variables tienen el mismo nombre.";
     case PROBLEM_ERROR_SLACK_NAME_CONFLICT:
-        return "A variable name is reserved for a slack variable.";
+        return "El nombre de una variable está reservado para una holgura.";
     case PROBLEM_ERROR_NEGATIVE_RIGHT_HAND_SIDE:
-        return "A right-hand side is negative.";
+        return "Un lado derecho es negativo.";
     }
-    return "Unknown problem error.";
+    return "Error desconocido del problema.";
 }

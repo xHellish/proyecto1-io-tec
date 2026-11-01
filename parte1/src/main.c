@@ -3,6 +3,8 @@
 // ---------------------------------------------
 #include <gtk/gtk.h>
 
+#include "main_window.h"
+
 // =============================================
 // Constants
 // ---------------------------------------------
@@ -63,7 +65,7 @@ int main(int argc, char *argv[]) {
     // Localizar el .glade junto al ejecutable, sin depender de la carpeta actual
     gchar *executable_dir = get_executable_dir(&error);
     if (executable_dir == NULL) {
-        gchar *message = g_strdup_printf("Could not locate the program folder: %s", error->message);
+        gchar *message = g_strdup_printf("No se pudo ubicar la carpeta del programa: %s", error->message);
         show_error_dialog(message);
         g_free(message);
         g_error_free(error);
@@ -79,7 +81,7 @@ int main(int argc, char *argv[]) {
 
     if (!gtk_builder_add_from_file(builder, glade_path, &error)) {
         gchar *message = g_strdup_printf(
-            "Could not load the interface file '%s': %s", glade_path, error->message);
+            "No se pudo cargar el archivo de la interfaz '%s': %s", glade_path, error->message);
 
         show_error_dialog(message);
         g_free(message);
@@ -97,7 +99,17 @@ int main(int argc, char *argv[]) {
     GtkWidget *main_window = GTK_WIDGET(gtk_builder_get_object(builder, MAIN_WINDOW_ID));
 
     if (main_window == NULL) {
-        show_error_dialog("The interface file does not define the main window.");
+        show_error_dialog("El archivo de la interfaz no define la ventana principal.");
+        g_object_unref(builder);
+        return 1;
+    }
+
+    // Widgets de la ventana; si falta alguno en el .glade se avisa cual
+    const char *missing_id = main_window_setup(builder, main_window);
+    if (missing_id != NULL) {
+        gchar *message = g_strdup_printf("Al archivo de la interfaz le falta el widget '%s'.", missing_id);
+        show_error_dialog(message);
+        g_free(message);
         g_object_unref(builder);
         return 1;
     }

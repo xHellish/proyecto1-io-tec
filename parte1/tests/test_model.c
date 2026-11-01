@@ -233,7 +233,7 @@ static void test_problem_validation(void) {
     // Un problema recien creado no tiene nombre
     check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_ERROR_EMPTY_PROBLEM_NAME,
           "fresh problem has no name");
-    check(strstr(message, "problem name") != NULL, "message mentions the problem name");
+    check(strstr(message, "nombre del problema") != NULL, "message mentions the problem name");
 
     problem_set_name(&problem, "   ");
     check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_ERROR_EMPTY_PROBLEM_NAME,
@@ -253,7 +253,7 @@ static void test_problem_validation(void) {
     problem_set_variable_name(&problem, 1, " $x_1$ ");
     check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_ERROR_DUPLICATE_VARIABLE_NAME,
           "duplicate names are rejected");
-    check(strstr(message, "1 and 2") != NULL, "message names both variables");
+    check(strstr(message, "1 y 2") != NULL, "message names both variables");
 
     // Nombre igual al de una holgura
     problem_set_variable_name(&problem, 1, "$s_2$");
@@ -271,7 +271,7 @@ static void test_problem_validation(void) {
     problem.right_hand_sides[1] = make(-1, 3);
     check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_ERROR_NEGATIVE_RIGHT_HAND_SIDE,
           "negative right-hand side is rejected");
-    check(strstr(message, "constraint 2") != NULL, "message names constraint 2");
+    check(strstr(message, "restricción 2") != NULL, "message names constraint 2");
 
     // Un lado derecho negativo fuera de las restricciones usadas no cuenta
     problem.right_hand_sides[1] = make(0, 1);

@@ -80,11 +80,11 @@ ProblemError problem_set_variable_name(Problem *problem, int variable_index, con
 void problem_default_variable_name(int index, char *buffer, size_t buffer_size);
 void problem_slack_name(int index, char *buffer, size_t buffer_size);
 
-// Revisa que el problema este completo y sea correcto. Escribe en message (en ingles)
+// Revisa que el problema este completo y sea correcto. Escribe en message (para el usuario)
 // que campo esta mal; si todo esta bien deja message vacio y devuelve PROBLEM_OK
 ProblemError problem_validate(const Problem *problem, char *message, size_t message_size);
 
-// Mensaje general en ingles para un codigo de error
+// Mensaje general para el usuario de un codigo de error
 const char *problem_error_message(ProblemError error);
 
 #endif

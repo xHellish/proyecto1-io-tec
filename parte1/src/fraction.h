@@ -59,7 +59,7 @@ int fraction_compare(Fraction left, Fraction right);
 // Escribe la fraccion como "3" o "1/3" en un buffer de FRACTION_STRING_SIZE
 void fraction_to_string(Fraction value, char *buffer, size_t buffer_size);
 
-// Mensaje en ingles para un estado de error
+// Mensaje para el usuario de un estado de error
 const char *fraction_status_message(FractionStatus status);
 
 #endif

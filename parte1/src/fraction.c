@@ -302,19 +302,19 @@ void fraction_to_string(Fraction value, char *buffer, size_t buffer_size) {
     snprintf(buffer, buffer_size, "%lld/%lld", value.numerator, value.denominator);
 }
 
-// Mensaje en ingles para un estado de error
+// Mensaje para el usuario de un estado de error
 const char *fraction_status_message(FractionStatus status) {
     switch (status) {
     case FRACTION_OK:
-        return "No error.";
+        return "Sin error.";
     case FRACTION_ERROR_OVERFLOW:
-        return "A number became too large to be represented exactly.";
+        return "Un número creció demasiado para representarlo de forma exacta.";
     case FRACTION_ERROR_ZERO_DENOMINATOR:
-        return "A fraction has a zero denominator or was divided by zero.";
+        return "Una fracción tiene denominador cero o se dividió entre cero.";
     case FRACTION_ERROR_EMPTY_TEXT:
-        return "The field is empty.";
+        return "El campo está vacío.";
     case FRACTION_ERROR_INVALID_FORMAT:
-        return "The text is not a valid number. Use an integer, a decimal such as 0.25 or a fraction such as 1/3.";
+        return "El texto no es un número válido. Use un entero, un decimal como 0.25 o una fracción como 1/3.";
     }
-    return "Unknown fraction error.";
+    return "Error desconocido de fracción.";
 }

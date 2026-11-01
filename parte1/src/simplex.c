@@ -6,7 +6,7 @@
 // Helpers
 // ---------------------------------------------
 
-// Revisa que el motor actual pueda resolver el problema (maximizar con restricciones <=)
+// Revisa que el motor actual pueda resolver el problema (restricciones <= y lados derechos no negativos)
 static SimplexStatus validate_problem(const Problem *problem) {
     // Tamanos dentro de los limites
     if (problem->variable_count < MIN_VARIABLES || problem->variable_count > MAX_VARIABLES) {
@@ -23,10 +23,7 @@ static SimplexStatus validate_problem(const Problem *problem) {
         }
     }
 
-    // Minimizar y las restricciones >= o = son de la Parte 2 y de la Fase 4
-    if (problem->objective_type != OBJECTIVE_MAXIMIZE) {
-        return SIMPLEX_ERROR_UNSUPPORTED;
-    }
+    // Las restricciones >= o = son de la Parte 2
     for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
         if (problem->constraint_types[constraint] != CONSTRAINT_LESS_EQUAL) {
             return SIMPLEX_ERROR_UNSUPPORTED;
@@ -63,6 +60,9 @@ static void build_initial_table(const Problem *problem, Table *table) {
     }
     table->column_types[right_hand_side_column] = COLUMN_RIGHT_HAND_SIDE;
 
+    // Maximizar o minimizar solo cambia la regla de la columna que entra, no la tabla
+    table->objective_type = problem->objective_type;
+
     // Fila objetivo: Z - c1 x1 - c2 x2 ... = 0, con el signo de los coeficientes cambiado
     table->cells[0][0] = fraction_from_int(1);
     for (int variable = 0; variable < variable_count; variable++) {
@@ -93,20 +93,36 @@ static void start_step(Step *step, const Table *table) {
     step->tied_row_count = 0;
 }
 
+// Indica si el valor de la fila objetivo mejora Z: negativo al maximizar, positivo al minimizar
+static int improves_objective(const Table *table, Fraction value) {
+    if (table->objective_type == OBJECTIVE_MINIMIZE) {
+        return fraction_sign(value) > 0;
+    }
+    return fraction_sign(value) < 0;
+}
+
+// Indica si candidate mejora Z mas que best: mas negativo al maximizar, mas positivo al minimizar
+static int improves_more(const Table *table, Fraction candidate, Fraction best) {
+    if (table->objective_type == OBJECTIVE_MINIMIZE) {
+        return fraction_compare(candidate, best) > 0;
+    }
+    return fraction_compare(candidate, best) < 0;
+}
+
 // =============================================
 // Engine pieces
 // ---------------------------------------------
 
-// Elige la columna que entra: el valor mas negativo de la fila objetivo
+// Elige la columna que entra: la que mas mejora Z segun maximizar o minimizar
 int simplex_choose_entering_column(const Table *table) {
     int entering_column = -1;
 
     // Solo las columnas de variables: se excluyen Z (primera) y el lado derecho (ultima)
     for (int column = 1; column < table->column_count - 1; column++) {
         Fraction value = table->cells[0][column];
-        if (fraction_sign(value) < 0) {
-            // Con empate se conserva la de menor indice: solo se reemplaza con un valor estrictamente menor
-            if (entering_column == -1 || fraction_compare(value, table->cells[0][entering_column]) < 0) {
+        if (improves_objective(table, value)) {
+            // Con empate se conserva la de menor indice: solo se reemplaza si mejora estrictamente
+            if (entering_column == -1 || improves_more(table, value, table->cells[0][entering_column])) {
                 entering_column = column;
             }
         }
@@ -114,28 +130,118 @@ int simplex_choose_entering_column(const Table *table) {
     return entering_column;
 }
 
-// PENDIENTE: ver la descripcion en simplex.h
+// Elige la fila que sale: la de fraccion minima, con desempate por menor indice de variable basica
 SimplexStatus simplex_choose_leaving_constraint(const Table *table, int entering_column, Step *step) {
-    (void)table;
-    (void)entering_column;
-    (void)step;
-    return SIMPLEX_ERROR_NOT_IMPLEMENTED;
+    int constraint_count = table->row_count - 1;
+    int right_hand_side_column = table->column_count - 1;
+    int minimum_constraint = -1;
+
+    step->leaving_constraint = -1;
+    step->tied_row_count = 0;
+
+    // Fraccion de cada fila: solo cuenta si el coeficiente de la columna que entra es positivo
+    for (int constraint = 0; constraint < constraint_count; constraint++) {
+        step->ratio_is_valid[constraint] = 0;
+        Fraction coefficient = table->cells[constraint + 1][entering_column];
+        if (fraction_sign(coefficient) > 0) {
+            FractionStatus status = fraction_divide(table->cells[constraint + 1][right_hand_side_column],
+                                                    coefficient, &step->ratios[constraint]);
+            if (status != FRACTION_OK) {
+                return SIMPLEX_ERROR_OVERFLOW;
+            }
+            step->ratio_is_valid[constraint] = 1;
+
+            // Recordar la fila con la fraccion mas pequena hasta ahora
+            if (minimum_constraint == -1 ||
+                fraction_compare(step->ratios[constraint], step->ratios[minimum_constraint]) < 0) {
+                minimum_constraint = constraint;
+            }
+        }
+    }
+
+    // Sin fracciones validas la columna puede crecer sin limite
+    if (minimum_constraint == -1) {
+        return SIMPLEX_UNBOUNDED;
+    }
+
+    // Entre las filas empatadas en el minimo sale la de variable basica con menor indice de columna
+    for (int constraint = 0; constraint < constraint_count; constraint++) {
+        if (step->ratio_is_valid[constraint] &&
+            fraction_compare(step->ratios[constraint], step->ratios[minimum_constraint]) == 0) {
+            step->tied_row_count++;
+            if (step->leaving_constraint == -1 ||
+                table->basis[constraint] < table->basis[step->leaving_constraint]) {
+                step->leaving_constraint = constraint;
+            }
+        }
+    }
+    return SIMPLEX_RUNNING;
 }
 
-// PENDIENTE: ver la descripcion en simplex.h
+// Pivotea: deja 1 en el pivote y 0 en el resto de su columna
 SimplexStatus simplex_pivot(Table *table, int leaving_constraint, int entering_column) {
-    (void)table;
-    (void)leaving_constraint;
-    (void)entering_column;
-    return SIMPLEX_ERROR_NOT_IMPLEMENTED;
+    int pivot_row = leaving_constraint + 1;
+    Fraction pivot = table->cells[pivot_row][entering_column];
+
+    // Dividir toda la fila del pivote entre el pivote
+    for (int column = 0; column < table->column_count; column++) {
+        FractionStatus status = fraction_divide(table->cells[pivot_row][column], pivot,
+                                                &table->cells[pivot_row][column]);
+        if (status != FRACTION_OK) {
+            return SIMPLEX_ERROR_OVERFLOW;
+        }
+    }
+
+    // A cada otra fila (incluida la objetivo) restarle su valor en la columna por la fila del pivote
+    for (int row = 0; row < table->row_count; row++) {
+        Fraction factor = table->cells[row][entering_column];
+        if (row == pivot_row || fraction_sign(factor) == 0) {
+            continue;
+        }
+        for (int column = 0; column < table->column_count; column++) {
+            Fraction product;
+            FractionStatus status = fraction_multiply(factor, table->cells[pivot_row][column], &product);
+            if (status != FRACTION_OK) {
+                return SIMPLEX_ERROR_OVERFLOW;
+            }
+            status = fraction_subtract(table->cells[row][column], product, &table->cells[row][column]);
+            if (status != FRACTION_OK) {
+                return SIMPLEX_ERROR_OVERFLOW;
+            }
+        }
+    }
+
+    // La variable que entra reemplaza a la que sale en la base
+    table->basis[leaving_constraint] = entering_column;
+    return SIMPLEX_RUNNING;
 }
 
-// PENDIENTE: ver la descripcion en simplex.h
+// Extrae la solucion de la tabla optima: las no basicas valen 0 y las basicas el lado derecho de su fila
 SimplexStatus simplex_extract_solution(const Problem *problem, const Table *table, SimplexResult *result) {
-    (void)problem;
-    (void)table;
-    (void)result;
-    return SIMPLEX_ERROR_NOT_IMPLEMENTED;
+    int right_hand_side_column = table->column_count - 1;
+
+    // Todo en cero para las variables que no estan en la base
+    for (int variable = 0; variable < problem->variable_count; variable++) {
+        result->variable_values[variable] = fraction_from_int(0);
+    }
+    for (int slack = 0; slack < problem->constraint_count; slack++) {
+        result->slack_values[slack] = fraction_from_int(0);
+    }
+
+    // Cada variable basica toma el valor del lado derecho de su fila
+    for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
+        int column = table->basis[constraint];
+        Fraction value = table->cells[constraint + 1][right_hand_side_column];
+        if (table->column_types[column] == COLUMN_ORIGINAL) {
+            result->variable_values[column - 1] = value;
+        } else {
+            result->slack_values[column - problem->variable_count - 1] = value;
+        }
+    }
+
+    // El lado derecho de la fila objetivo es el valor de Z
+    result->objective_value = table->cells[0][right_hand_side_column];
+    return SIMPLEX_OPTIMAL;
 }
 
 // =============================================
@@ -148,6 +254,15 @@ SimplexResult *simplex_solve(const Problem *problem) {
     if (result == NULL) {
         return NULL;
     }
+
+    // La solucion empieza en cero para que nunca contenga fracciones invalidas si no hay optimo
+    for (int variable = 0; variable < MAX_VARIABLES; variable++) {
+        result->variable_values[variable] = fraction_from_int(0);
+    }
+    for (int slack = 0; slack < MAX_CONSTRAINTS; slack++) {
+        result->slack_values[slack] = fraction_from_int(0);
+    }
+    result->objective_value = fraction_from_int(0);
 
     // Rechazar de entrada los problemas que el motor no puede resolver
     result->status = validate_problem(problem);
@@ -166,7 +281,7 @@ SimplexResult *simplex_solve(const Problem *problem) {
         start_step(step, &table);
         result->step_count = pivot_count + 1;
 
-        // Sin valores negativos en la fila objetivo la tabla es optima
+        // Si ningun valor de la fila objetivo mejora Z la tabla es optima
         int entering_column = simplex_choose_entering_column(&table);
         if (entering_column == -1) {
             status = simplex_extract_solution(problem, &table, result);
@@ -201,25 +316,23 @@ void simplex_result_free(SimplexResult *result) {
     free(result);
 }
 
-// Mensaje en ingles para el estado del resultado
+// Mensaje para el usuario del estado del resultado
 const char *simplex_status_message(SimplexStatus status) {
     switch (status) {
     case SIMPLEX_RUNNING:
-        return "The solver is still running.";
+        return "El Simplex todavía está en ejecución.";
     case SIMPLEX_OPTIMAL:
-        return "An optimal solution was found.";
+        return "Se encontró una solución óptima.";
     case SIMPLEX_UNBOUNDED:
-        return "The problem is unbounded: the objective can grow without limit.";
+        return "El problema es no acotado: Z puede mejorar sin límite.";
     case SIMPLEX_ITERATION_LIMIT:
-        return "The iteration limit was reached before finding a solution.";
+        return "Se alcanzó el límite de iteraciones sin encontrar una solución.";
     case SIMPLEX_ERROR_OVERFLOW:
-        return "A number became too large to be represented exactly.";
+        return "Un número creció demasiado para representarlo de forma exacta.";
     case SIMPLEX_ERROR_INVALID_PROBLEM:
-        return "The problem is invalid: check the sizes and the right-hand sides.";
+        return "El problema no es válido: revise las cantidades y los lados derechos.";
     case SIMPLEX_ERROR_UNSUPPORTED:
-        return "Only maximization with <= constraints is supported for now.";
-    case SIMPLEX_ERROR_NOT_IMPLEMENTED:
-        return "This part of the solver is not implemented yet.";
+        return "Esta versión solo acepta restricciones <=.";
     }
-    return "Unknown solver status.";
+    return "Estado desconocido del Simplex.";
 }

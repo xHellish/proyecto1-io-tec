@@ -1,0 +1,232 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<interface>
+  <requires lib="gtk+" version="3.20"/>
+  <object class="GtkAdjustment" id="variables_adjustment">
+    <property name="lower">2</property>
+    <property name="upper">15</property>
+    <property name="value">2</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkAdjustment" id="constraints_adjustment">
+    <property name="lower">2</property>
+    <property name="upper">15</property>
+    <property name="value">2</property>
+    <property name="step-increment">1</property>
+  </object>
+  <object class="GtkWindow" id="ui_test_window">
+    <property name="title">Simplex - ventana de prueba</property>
+    <property name="default-width">900</property>
+    <property name="default-height">650</property>
+    <property name="window-position">center</property>
+    <child>
+      <object class="GtkNotebook">
+        <property name="visible">True</property>
+
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">8</property>
+            <property name="margin">12</property>
+            <child>
+              <object class="GtkLabel">
+                <property name="visible">True</property>
+                <property name="label">Escriba un número: un entero (3), un decimal con punto o coma (0.25, 0,5) o una fracción (1/3).</property>
+                <property name="wrap">True</property>
+                <property name="xalign">0</property>
+              </object>
+              <packing><property name="expand">False</property></packing>
+            </child>
+            <child>
+              <object class="GtkEntry" id="number_entry">
+                <property name="visible">True</property>
+              </object>
+              <packing><property name="expand">False</property></packing>
+            </child>
+            <child>
+              <object class="GtkLabel" id="number_result">
+                <property name="visible">True</property>
+                <property name="selectable">True</property>
+                <property name="wrap">True</property>
+                <property name="xalign">0</property>
+              </object>
+              <packing><property name="expand">False</property></packing>
+            </child>
+          </object>
+        </child>
+        <child type="tab">
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="label">Números</property>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">8</property>
+            <property name="margin">12</property>
+            <child>
+              <object class="GtkGrid">
+                <property name="visible">True</property>
+                <property name="row-spacing">6</property>
+                <property name="column-spacing">12</property>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label">Nombre del problema</property>
+                    <property name="xalign">0</property>
+                  </object>
+                  <packing><property name="left-attach">0</property><property name="top-attach">0</property></packing>
+                </child>
+                <child>
+                  <object class="GtkEntry" id="name_entry">
+                    <property name="visible">True</property>
+                    <property name="hexpand">True</property>
+                  </object>
+                  <packing><property name="left-attach">1</property><property name="top-attach">0</property></packing>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label">Variables</property>
+                    <property name="xalign">0</property>
+                  </object>
+                  <packing><property name="left-attach">0</property><property name="top-attach">1</property></packing>
+                </child>
+                <child>
+                  <object class="GtkSpinButton" id="variables_spin">
+                    <property name="visible">True</property>
+                    <property name="adjustment">variables_adjustment</property>
+                    <property name="halign">start</property>
+                  </object>
+                  <packing><property name="left-attach">1</property><property name="top-attach">1</property></packing>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label">Restricciones</property>
+                    <property name="xalign">0</property>
+                  </object>
+                  <packing><property name="left-attach">0</property><property name="top-attach">2</property></packing>
+                </child>
+                <child>
+                  <object class="GtkSpinButton" id="constraints_spin">
+                    <property name="visible">True</property>
+                    <property name="adjustment">constraints_adjustment</property>
+                    <property name="halign">start</property>
+                  </object>
+                  <packing><property name="left-attach">1</property><property name="top-attach">2</property></packing>
+                </child>
+                <child>
+                  <object class="GtkLabel">
+                    <property name="visible">True</property>
+                    <property name="label">Nombres de variables separados por comas (vacío usa los de por defecto)</property>
+                    <property name="xalign">0</property>
+                  </object>
+                  <packing><property name="left-attach">0</property><property name="top-attach">3</property></packing>
+                </child>
+                <child>
+                  <object class="GtkEntry" id="names_entry">
+                    <property name="visible">True</property>
+                    <property name="hexpand">True</property>
+                  </object>
+                  <packing><property name="left-attach">1</property><property name="top-attach">3</property></packing>
+                </child>
+              </object>
+              <packing><property name="expand">False</property></packing>
+            </child>
+            <child>
+              <object class="GtkCheckButton" id="negative_rhs_check">
+                <property name="visible">True</property>
+                <property name="label">Poner negativo el lado derecho de la restricción 1</property>
+              </object>
+              <packing><property name="expand">False</property></packing>
+            </child>
+            <child>
+              <object class="GtkScrolledWindow">
+                <property name="visible">True</property>
+                <property name="shadow-type">in</property>
+                <child>
+                  <object class="GtkTextView" id="model_text">
+                    <property name="visible">True</property>
+                    <property name="editable">False</property>
+                    <property name="cursor-visible">False</property>
+                    <property name="monospace">True</property>
+                    <property name="left-margin">8</property>
+                    <property name="top-margin">8</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child type="tab">
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="label">Modelo</property>
+          </object>
+        </child>
+
+        <child>
+          <object class="GtkBox">
+            <property name="visible">True</property>
+            <property name="orientation">vertical</property>
+            <property name="spacing">8</property>
+            <property name="margin">12</property>
+            <child>
+              <object class="GtkBox">
+                <property name="visible">True</property>
+                <property name="spacing">8</property>
+                <child>
+                  <object class="GtkComboBoxText" id="problem_combo">
+                    <property name="visible">True</property>
+                    <property name="active">0</property>
+                    <items>
+                      <item translatable="no">Pesadilla de Dantzig (tarea de clase)</item>
+                      <item translatable="no">Wyndor Glass (maximizar 3x1 + 5x2)</item>
+                      <item translatable="no">Minimizar x1 - 3x2</item>
+                    </items>
+                  </object>
+                  <packing><property name="expand">False</property></packing>
+                </child>
+                <child>
+                  <object class="GtkButton" id="solve_button">
+                    <property name="visible">True</property>
+                    <property name="label">Resolver</property>
+                  </object>
+                  <packing><property name="expand">False</property></packing>
+                </child>
+              </object>
+              <packing><property name="expand">False</property></packing>
+            </child>
+            <child>
+              <object class="GtkScrolledWindow">
+                <property name="visible">True</property>
+                <property name="shadow-type">in</property>
+                <child>
+                  <object class="GtkTextView" id="solver_text">
+                    <property name="visible">True</property>
+                    <property name="editable">False</property>
+                    <property name="cursor-visible">False</property>
+                    <property name="monospace">True</property>
+                    <property name="left-margin">8</property>
+                    <property name="top-margin">8</property>
+                  </object>
+                </child>
+              </object>
+            </child>
+          </object>
+        </child>
+        <child type="tab">
+          <object class="GtkLabel">
+            <property name="visible">True</property>
+            <property name="label">Simplex</property>
+          </object>
+        </child>
+
+      </object>
+    </child>
+  </object>
+</interface>

@@ -11,6 +11,7 @@
 #define GLADE_RELATIVE_PATH "ui/main_window.glade"
 #define MAIN_WINDOW_ID "main_window"
 #define EXECUTABLE_LINK "/proc/self/exe"
+#define OUTPUT_DIR_NAME "output"
 
 // =============================================
 // Helpers
@@ -72,6 +73,7 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     gchar *glade_path = g_build_filename(executable_dir, GLADE_RELATIVE_PATH, NULL);
+    gchar *output_dir = g_build_filename(executable_dir, OUTPUT_DIR_NAME, NULL);
     g_free(executable_dir);
 
     // Cargar la interfaz con GtkBuilder
@@ -88,6 +90,7 @@ int main(int argc, char *argv[]) {
 
         g_error_free(error);
         g_free(glade_path);
+        g_free(output_dir);
 
         g_object_unref(builder);
 
@@ -100,12 +103,14 @@ int main(int argc, char *argv[]) {
 
     if (main_window == NULL) {
         show_error_dialog("El archivo de la interfaz no define la ventana principal.");
+        g_free(output_dir);
         g_object_unref(builder);
         return 1;
     }
 
     // Widgets de la ventana; si falta alguno en el .glade se avisa cual
-    const char *missing_id = main_window_setup(builder, main_window);
+    const char *missing_id = main_window_setup(builder, main_window, output_dir);
+    g_free(output_dir);
     if (missing_id != NULL) {
         gchar *message = g_strdup_printf("Al archivo de la interfaz le falta el widget '%s'.", missing_id);
         show_error_dialog(message);

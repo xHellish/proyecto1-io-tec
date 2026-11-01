@@ -11,7 +11,7 @@
 // ---------------------------------------------
 
 // Agrega a output el problema, el estado, todas las tablas del historial con sus
-// decisiones y la solucion. Es temporal: se reemplaza por el documento LaTeX en la Fase 3
+// decisiones y la solucion. Solo lo usa la ventana de prueba; el programa genera un PDF
 void text_report_append(GString *output, const Problem *problem, const SimplexResult *result);
 
 #endif

@@ -59,10 +59,10 @@ TEST_MODEL = test_model
 TEST_SIMPLEX = test_simplex
 UI_TEST = ui_test
 REFERENCE_SOURCES = $(TEST_DIR)/reference_problems.c
-REFERENCE_HEADERS = $(TEST_DIR)/reference_problems.h
+REFERENCE_HEADERS = $(TEST_DIR)/reference_problems.h $(TEST_DIR)/text_report.h
 MODEL_SOURCES = $(SRC_DIR)/fraction.c $(SRC_DIR)/problem.c
 ENGINE_SOURCES = $(MODEL_SOURCES) $(SRC_DIR)/simplex.c
-REPORT_SOURCES = $(ENGINE_SOURCES) $(SRC_DIR)/text_report.c
+REPORT_SOURCES = $(ENGINE_SOURCES) $(TEST_DIR)/text_report.c
 
 # Compila y corre las pruebas del modelo y del motor (sin GTK)
 test: $(TEST_MODEL) $(TEST_SIMPLEX)

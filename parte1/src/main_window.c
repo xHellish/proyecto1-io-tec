@@ -4,8 +4,9 @@
 
 #include "fraction.h"
 #include "problem.h"
+#include "latex_report.h"
+#include "launcher.h"
 #include "simplex.h"
-#include "text_report.h"
 
 // =============================================
 // Constants
@@ -37,9 +38,9 @@ typedef struct {
     GtkWidget *variables_spin;
     GtkWidget *constraints_spin;
     GtkWidget *model_grid;
+    GtkWidget *intermediate_check;
     GtkWidget *solve_button;
     GtkWidget *status_label;
-    GtkWidget *results_text;
 
     // Cuadricula creada una sola vez en su tamano maximo; solo se muestra la parte activa
     GtkWidget *name_entries[MAX_VARIABLES];
@@ -58,6 +59,9 @@ typedef struct {
 
 static Widgets widgets;
 
+// Carpeta donde quedan el .tex y el .pdf (junto al ejecutable)
+static gchar *output_dir = NULL;
+
 // =============================================
 // Helpers
 // ---------------------------------------------
@@ -69,12 +73,6 @@ static void show_error_dialog(const char *message) {
     gtk_window_set_title(GTK_WINDOW(dialog), "Error");
     gtk_dialog_run(GTK_DIALOG(dialog));
     gtk_widget_destroy(dialog);
-}
-
-// Reemplaza el contenido de un GtkTextView
-static void set_text_view_text(GtkWidget *text_view, const char *text) {
-    GtkTextBuffer *buffer = gtk_text_view_get_buffer(GTK_TEXT_VIEW(text_view));
-    gtk_text_buffer_set_text(buffer, text, -1);
 }
 
 // Crea un campo de texto de la cuadricula; su visibilidad la controla update_sizes
@@ -234,7 +232,38 @@ static void on_sizes_changed(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data
     }
 }
 
-// Lee el problema, lo resuelve y muestra el historial completo
+// Escribe el .tex del resultado, lo compila y abre el PDF; si algo falla escribe el motivo en message
+static int publish_result(const Problem *problem, const SimplexResult *result, char *message, size_t message_size) {
+    char base_name[MAX_NAME_LENGTH + 1];
+    int is_published = 0;
+
+    // Archivos de salida con el nombre del problema
+    launcher_file_name(problem->name, base_name, sizeof(base_name));
+    gchar *tex_name = g_strdup_printf("%s.tex", base_name);
+    gchar *pdf_name = g_strdup_printf("%s.pdf", base_name);
+    gchar *tex_path = g_build_filename(output_dir, tex_name, NULL);
+    gchar *pdf_path = g_build_filename(output_dir, pdf_name, NULL);
+
+    // Cada etapa solo corre si la anterior salio bien
+    if (launcher_prepare_output_dir(output_dir, message, message_size) &&
+        latex_report_write(tex_path, problem, result,
+                           gtk_toggle_button_get_active(GTK_TOGGLE_BUTTON(widgets.intermediate_check)), message,
+                           message_size) &&
+        launcher_compile(output_dir, tex_name, message, message_size) &&
+        launcher_open_pdf(pdf_path, message, message_size)) {
+        snprintf(message, message_size, "%s PDF generado: output/%s", simplex_status_message(result->status),
+                 pdf_name);
+        is_published = 1;
+    }
+
+    g_free(tex_name);
+    g_free(pdf_name);
+    g_free(tex_path);
+    g_free(pdf_path);
+    return is_published;
+}
+
+// Lee el problema, lo resuelve y genera y abre el documento
 static void on_solve_clicked(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED) {
     Problem problem;
     char message[MESSAGE_BUFFER_SIZE];
@@ -252,12 +281,13 @@ static void on_solve_clicked(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data
         return;
     }
 
-    // Reporte del historial en el panel de resultados
-    GString *output = g_string_new(NULL);
-    text_report_append(output, &problem, result);
-    set_text_view_text(widgets.results_text, output->str);
-    gtk_label_set_text(GTK_LABEL(widgets.status_label), simplex_status_message(result->status));
-    g_string_free(output, TRUE);
+    // Documento LaTeX, compilacion y visor; el estado queda en la etiqueta bajo el boton
+    if (publish_result(&problem, result, message, sizeof(message))) {
+        gtk_label_set_text(GTK_LABEL(widgets.status_label), message);
+    } else {
+        gtk_label_set_text(GTK_LABEL(widgets.status_label), "No se pudo generar el documento.");
+        show_error_dialog(message);
+    }
     simplex_result_free(result);
 }
 
@@ -266,21 +296,22 @@ static void on_solve_clicked(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data
 // ---------------------------------------------
 
 // Toma los widgets del .glade, arma la cuadricula y conecta las senales
-const char *main_window_setup(GtkBuilder *builder, GtkWidget *window) {
+const char *main_window_setup(GtkBuilder *builder, GtkWidget *window, const char *output_directory) {
     WidgetBinding bindings[] = {
         {"problem_name_entry", &widgets.problem_name_entry},
         {"objective_combo", &widgets.objective_combo},
         {"variables_spin", &widgets.variables_spin},
         {"constraints_spin", &widgets.constraints_spin},
         {"model_grid", &widgets.model_grid},
+        {"intermediate_check", &widgets.intermediate_check},
         {"solve_button", &widgets.solve_button},
         {"status_label", &widgets.status_label},
-        {"results_text", &widgets.results_text},
     };
     int binding_count = (int)(sizeof(bindings) / sizeof(bindings[0]));
 
     // Cada widget del .glade debe existir
     widgets.window = window;
+    output_dir = g_strdup(output_directory);
     for (int index = 0; index < binding_count; index++) {
         GObject *object = gtk_builder_get_object(builder, bindings[index].id);
         if (object == NULL) {

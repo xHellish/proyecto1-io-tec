@@ -79,3 +79,20 @@ void build_minimization_example(Problem *problem) {
     set_fraction(&problem->coefficients[1][1], 1, 1);
     set_fraction(&problem->right_hand_sides[1], 6, 1);
 }
+
+// Soluciones multiples de clase: en la tabla optima x1 no es basica y tiene 0 en la fila Z
+void build_class_multiple_solutions(Problem *problem) {
+    problem_init(problem);
+    problem_set_name(problem, "Multiple solutions (class)");
+
+    set_fraction(&problem->objective[0], 2, 1);
+    set_fraction(&problem->objective[1], 4, 1);
+
+    set_fraction(&problem->coefficients[0][0], 1, 1);
+    set_fraction(&problem->coefficients[0][1], 2, 1);
+    set_fraction(&problem->right_hand_sides[0], 5, 1);
+
+    set_fraction(&problem->coefficients[1][0], 1, 1);
+    set_fraction(&problem->coefficients[1][1], 1, 1);
+    set_fraction(&problem->right_hand_sides[1], 4, 1);
+}

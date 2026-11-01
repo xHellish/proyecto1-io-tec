@@ -9,6 +9,9 @@
 // Ancho minimo de cada columna de la tabla
 #define MINIMUM_CELL_WIDTH 5
 
+// Soluciones adicionales que se reportan cuando hay soluciones multiples
+#define EXTRA_POINT_COUNT 3
+
 // =============================================
 // Helpers
 // ---------------------------------------------
@@ -149,28 +152,16 @@ static void append_table(GString *output, const Table *table, int variable_count
     }
 }
 
-// Agrega un paso del historial: su tabla y las decisiones que se tomaron sobre ella
-static void append_step(GString *output, const SimplexResult *result, const Problem *problem, int step_index) {
-    const Step *step = &result->steps[step_index];
+// Agrega las decisiones tomadas sobre una tabla: columna que entra, fracciones, fila que sale y empates.
+// reason explica por que entra la columna; show_no_leaving indica si se explica que ninguna fila sale
+static void append_decisions(GString *output, const Step *step, const Problem *problem, const char *reason,
+                             int show_no_leaving) {
     char label[NAME_BUFFER_SIZE];
     char pivot_text[FRACTION_STRING_SIZE];
     char ratio_text[FRACTION_STRING_SIZE];
-    int is_last_step = (step_index == result->step_count - 1);
 
-    g_string_append_printf(output, "Tabla %d\n", step_index);
-    append_table(output, &step->table, problem->variable_count);
-
-    // Columna que entra, segun la regla de maximizar o minimizar
-    if (step->entering_column == -1) {
-        g_string_append(output, "Entra: ninguna (la tabla es óptima)\n\n");
-        return;
-    }
     write_column_label(&step->table, problem->variable_count, step->entering_column, label, NAME_BUFFER_SIZE);
-    if (step->table.objective_type == OBJECTIVE_MINIMIZE) {
-        g_string_append_printf(output, "Entra: %s (valor más positivo de la fila Z)\n", label);
-    } else {
-        g_string_append_printf(output, "Entra: %s (valor más negativo de la fila Z)\n", label);
-    }
+    g_string_append_printf(output, "Entra: %s (%s)\n", label, reason);
 
     // Fila que sale, con sus fracciones y el empate si lo hubo
     if (step->leaving_constraint != -1) {
@@ -195,26 +186,131 @@ static void append_step(GString *output, const SimplexResult *result, const Prob
                                    "Empate: %d filas tienen la fracción mínima; sale la variable básica de menor índice\n",
                                    step->tied_row_count);
         }
-    } else if (is_last_step && result->status == SIMPLEX_UNBOUNDED) {
+    } else if (show_no_leaving) {
         g_string_append(output, "Sale: ninguna (la columna no tiene coeficientes positivos)\n");
+    }
+}
+
+// Agrega un paso del historial: su tabla y las decisiones que se tomaron sobre ella
+static void append_step(GString *output, const SimplexResult *result, const Problem *problem, int step_index) {
+    const Step *step = &result->steps[step_index];
+    int is_last_step = (step_index == result->step_count - 1);
+
+    g_string_append_printf(output, "Tabla %d\n", step_index);
+    append_table(output, &step->table, problem->variable_count);
+
+    // Columna que entra, segun la regla de maximizar o minimizar
+    if (step->entering_column == -1) {
+        g_string_append(output, "Entra: ninguna (la tabla es óptima)\n\n");
+        return;
+    }
+    if (step->table.objective_type == OBJECTIVE_MINIMIZE) {
+        append_decisions(output, step, problem, "valor más positivo de la fila Z",
+                         is_last_step && result->status == SIMPLEX_UNBOUNDED);
+    } else {
+        append_decisions(output, step, problem, "valor más negativo de la fila Z",
+                         is_last_step && result->status == SIMPLEX_UNBOUNDED);
     }
     g_string_append(output, "\n");
 }
 
-// Agrega la solucion final de un problema optimo
-static void append_solution(GString *output, const SimplexResult *result, const Problem *problem) {
+// Agrega una solucion: Z, variables originales y holguras
+static void append_solution(GString *output, const char *title, const Problem *problem,
+                            const Fraction variable_values[], const Fraction slack_values[],
+                            Fraction objective_value) {
     char value_text[FRACTION_STRING_SIZE];
 
-    fraction_to_string(result->objective_value, value_text, FRACTION_STRING_SIZE);
-    g_string_append_printf(output, "Solución: Z = %s\n", value_text);
+    fraction_to_string(objective_value, value_text, FRACTION_STRING_SIZE);
+    g_string_append_printf(output, "%s: Z = %s\n", title, value_text);
     for (int variable = 0; variable < problem->variable_count; variable++) {
-        fraction_to_string(result->variable_values[variable], value_text, FRACTION_STRING_SIZE);
+        fraction_to_string(variable_values[variable], value_text, FRACTION_STRING_SIZE);
         g_string_append_printf(output, "  x%d = %s\n", variable + 1, value_text);
     }
     for (int slack = 0; slack < problem->constraint_count; slack++) {
-        fraction_to_string(result->slack_values[slack], value_text, FRACTION_STRING_SIZE);
+        fraction_to_string(slack_values[slack], value_text, FRACTION_STRING_SIZE);
         g_string_append_printf(output, "  s%d = %s\n", slack + 1, value_text);
     }
+}
+
+// Agrega un vector de variables originales como (a, b, c)
+static void append_vector(GString *output, const Fraction values[], int variable_count) {
+    char value_text[FRACTION_STRING_SIZE];
+
+    g_string_append(output, "(");
+    for (int variable = 0; variable < variable_count; variable++) {
+        if (variable > 0) {
+            g_string_append(output, ", ");
+        }
+        fraction_to_string(values[variable], value_text, FRACTION_STRING_SIZE);
+        g_string_append(output, value_text);
+    }
+    g_string_append(output, ")");
+}
+
+// Agrega tres puntos adicionales de las soluciones multiples con su valor del parametro
+static void append_extra_points(GString *output, const SimplexResult *result, const Problem *problem,
+                                const char *parameter_name, const long long parameters[][2]) {
+    Fraction parameter;
+    Fraction values[MAX_VARIABLES];
+    char parameter_text[FRACTION_STRING_SIZE];
+
+    g_string_append(output, "Otras soluciones óptimas:\n");
+    for (int index = 0; index < EXTRA_POINT_COUNT; index++) {
+        // Valor del parametro y punto que genera; cualquier fallo se reporta en lugar del punto
+        FractionStatus fraction_status = fraction_make(parameters[index][0], parameters[index][1], &parameter);
+        if (fraction_status != FRACTION_OK) {
+            g_string_append_printf(output, "  %s: %s\n", parameter_name, fraction_status_message(fraction_status));
+            continue;
+        }
+        fraction_to_string(parameter, parameter_text, FRACTION_STRING_SIZE);
+        if (simplex_alternative_point(result, problem->variable_count, parameter, values) != SIMPLEX_RUNNING) {
+            g_string_append_printf(output, "  %s = %s: el punto no se puede representar de forma exacta\n",
+                                   parameter_name, parameter_text);
+            continue;
+        }
+        g_string_append_printf(output, "  %s = %s: ", parameter_name, parameter_text);
+        append_vector(output, values, problem->variable_count);
+        g_string_append(output, "\n");
+    }
+}
+
+// Agrega las soluciones multiples: el pivoteo extra, la segunda tabla y la ecuacion que genera las demas
+static void append_multiple_solutions(GString *output, const SimplexResult *result, const Problem *problem) {
+    const Step *step = &result->alternative_step;
+    char label[NAME_BUFFER_SIZE];
+    const long long segment_parameters[EXTRA_POINT_COUNT][2] = {{1, 4}, {1, 2}, {3, 4}};
+    const long long ray_parameters[EXTRA_POINT_COUNT][2] = {{1, 1}, {2, 1}, {3, 1}};
+
+    write_column_label(&step->table, problem->variable_count, step->entering_column, label, NAME_BUFFER_SIZE);
+    g_string_append_printf(output, "\nSoluciones múltiples: %s no es básica y tiene 0 en la fila Z, "
+                                   "así que se pivotea una vez más\n",
+                           label);
+    append_decisions(output, step, problem, "0 en la fila Z", 1);
+
+    // Segmento: segunda tabla final, segunda solucion y combinacion de ambas
+    if (result->multiple_kind == MULTIPLE_SEGMENT) {
+        g_string_append(output, "\nSegunda tabla final\n");
+        append_table(output, &result->alternative_table, problem->variable_count);
+        g_string_append(output, "\n");
+        append_solution(output, "Segunda solución", problem, result->alternative_variable_values,
+                        result->alternative_slack_values, result->objective_value);
+        g_string_append(output, "\nTodas las soluciones óptimas: α");
+        append_vector(output, result->variable_values, problem->variable_count);
+        g_string_append(output, " + (1 - α)");
+        append_vector(output, result->alternative_variable_values, problem->variable_count);
+        g_string_append(output, ", con 0 ≤ α ≤ 1\n");
+        append_extra_points(output, result, problem, "α", segment_parameters);
+        return;
+    }
+
+    // Rayo: no hay segunda tabla, la variable puede crecer sin cambiar Z
+    g_string_append_printf(output, "%s puede crecer sin límite y Z no cambia\n", label);
+    g_string_append(output, "Todas las soluciones óptimas: ");
+    append_vector(output, result->variable_values, problem->variable_count);
+    g_string_append(output, " + t");
+    append_vector(output, result->ray_direction, problem->variable_count);
+    g_string_append(output, ", con t ≥ 0\n");
+    append_extra_points(output, result, problem, "t", ray_parameters);
 }
 
 // =============================================
@@ -234,6 +330,10 @@ void text_report_append(GString *output, const Problem *problem, const SimplexRe
 
     // La solucion solo existe si hubo optimo
     if (result->status == SIMPLEX_OPTIMAL) {
-        append_solution(output, result, problem);
+        append_solution(output, "Solución", problem, result->variable_values, result->slack_values,
+                        result->objective_value);
+        if (result->multiple_kind != MULTIPLE_NONE) {
+            append_multiple_solutions(output, result, problem);
+        }
     }
 }

@@ -187,6 +187,7 @@
                       <item translatable="no">Pesadilla de Dantzig (tarea de clase)</item>
                       <item translatable="no">Wyndor Glass (maximizar 3x1 + 5x2)</item>
                       <item translatable="no">Minimizar x1 - 3x2</item>
+                      <item translatable="no">Soluciones múltiples (ejemplo de clase)</item>
                     </items>
                   </object>
                   <packing><property name="expand">False</property></packing>

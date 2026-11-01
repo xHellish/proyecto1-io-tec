@@ -399,6 +399,8 @@ static void test_zero_objective(void) {
     check_value(result->objective_value, "0", "zero objective Z");
     check_value(result->slack_values[0], "4", "zero objective s1");
     check_value(result->slack_values[1], "5", "zero objective s2");
+    check(result->multiple_kind == MULTIPLE_SEGMENT, "zero objective has multiple solutions");
+    check_value(result->alternative_variable_values[0], "4", "zero objective second x1");
     simplex_result_free(result);
 }
 
@@ -547,6 +549,151 @@ static void test_minimization_unbounded(void) {
 }
 
 // =============================================
+// Multiple solution tests
+// ---------------------------------------------
+
+// Calcula un punto de las soluciones multiples y lo compara con los valores esperados de x1 y x2
+static void check_alternative_point(const SimplexResult *result, long long numerator, long long denominator,
+                                    const char *expected_x1, const char *expected_x2, const char *name) {
+    Fraction parameter;
+    Fraction values[MAX_VARIABLES];
+    char description[160];
+
+    set_fraction(&parameter, numerator, denominator);
+    SimplexStatus status = simplex_alternative_point(result, 2, parameter, values);
+    snprintf(description, sizeof(description), "%s: point is computed", name);
+    check(status == SIMPLEX_RUNNING, description);
+    snprintf(description, sizeof(description), "%s: x1", name);
+    check_value(values[0], expected_x1, description);
+    snprintf(description, sizeof(description), "%s: x2", name);
+    check_value(values[1], expected_x2, description);
+}
+
+// Ejemplo de clase: las mismas tablas de las diapositivas y los puntos de la ecuacion con alfa
+static void test_class_multiple_solutions(void) {
+    Problem problem;
+    build_class_multiple_solutions(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "class multiple solutions returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_OPTIMAL, "class multiple solutions is optimal");
+    check(result->step_count == 2, "class multiple solutions reaches the optimum in 1 pivot");
+    if (result->step_count != 2) {
+        simplex_result_free(result);
+        return;
+    }
+
+    // Primera tabla: entra x2 (-4) y sale s1 (5/2 contra 4)
+    check_step(result, 0, 2, 0, 1, "class multiple step 0");
+    check_value(result->steps[0].ratios[0], "5/2", "class multiple step 0: ratio of constraint 1");
+    check_value(result->steps[0].ratios[1], "4", "class multiple step 0: ratio of constraint 2");
+
+    // Tabla optima de la diapositiva: x1 no es basica y tiene 0 en la fila Z
+    const char *optimal_table[] = {
+        "1", "0", "0", "2", "0", "10",
+        "0", "1/2", "1", "1/2", "0", "5/2",
+        "0", "1/2", "0", "-1/2", "1", "3/2",
+    };
+    check_table(&result->steps[1].table, optimal_table, 3, 6, "class multiple optimal table");
+    check_value(result->objective_value, "10", "class multiple Z");
+    check_value(result->variable_values[0], "0", "class multiple first x1");
+    check_value(result->variable_values[1], "5/2", "class multiple first x2");
+    check_value(result->slack_values[1], "3/2", "class multiple first s2");
+
+    // Pivoteo extra: entra x1, fracciones 5 y 3, sale s2 con pivote 1/2
+    check(result->multiple_kind == MULTIPLE_SEGMENT, "class multiple has a segment of solutions");
+    check(result->alternative_step.entering_column == 1, "extra pivot: x1 enters");
+    check(result->alternative_step.leaving_constraint == 1, "extra pivot: s2 leaves");
+    check_value(result->alternative_step.ratios[0], "5", "extra pivot: ratio of constraint 1");
+    check_value(result->alternative_step.ratios[1], "3", "extra pivot: ratio of constraint 2");
+    check_value(result->alternative_step.pivot, "1/2", "extra pivot: pivot");
+
+    // Segunda tabla final de la diapositiva
+    const char *second_table[] = {
+        "1", "0", "0", "2", "0", "10",
+        "0", "0", "1", "1", "-1", "1",
+        "0", "1", "0", "-1", "2", "3",
+    };
+    check_table(&result->alternative_table, second_table, 3, 6, "class multiple second final table");
+    check_value(result->alternative_variable_values[0], "3", "class multiple second x1");
+    check_value(result->alternative_variable_values[1], "1", "class multiple second x2");
+    check_value(result->alternative_slack_values[0], "0", "class multiple second s1");
+    check_value(result->alternative_slack_values[1], "0", "class multiple second s2");
+
+    // Puntos de la diapositiva: alfa 0.5, 0.1 y 0.75
+    check_alternative_point(result, 1, 2, "3/2", "7/4", "alpha 1/2");
+    check_alternative_point(result, 1, 10, "27/10", "23/20", "alpha 1/10");
+    check_alternative_point(result, 3, 4, "3/4", "17/8", "alpha 3/4");
+    simplex_result_free(result);
+}
+
+// La columna con 0 no tiene fracciones validas: las soluciones forman un rayo (0, 1) + t (1, 0)
+static void test_multiple_solutions_ray(void) {
+    Problem problem;
+    problem_init(&problem);
+    problem_set_name(&problem, "Ray of solutions");
+    set_fraction(&problem.objective[1], 1, 1);
+    set_fraction(&problem.coefficients[0][1], 1, 1);
+    set_fraction(&problem.right_hand_sides[0], 1, 1);
+    set_fraction(&problem.coefficients[1][0], -1, 1);
+    set_fraction(&problem.coefficients[1][1], 1, 1);
+    set_fraction(&problem.right_hand_sides[1], 1, 1);
+
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "ray returns a result");
+    if (result == NULL) {
+        return;
+    }
+    check(result->status == SIMPLEX_OPTIMAL, "ray problem is optimal");
+    check(result->multiple_kind == MULTIPLE_RAY, "solutions form a ray");
+    check(result->alternative_step.entering_column == 1, "ray: x1 has the 0");
+    check(result->alternative_step.leaving_constraint == -1, "ray: no row can leave");
+    check_value(result->ray_direction[0], "1", "ray direction x1");
+    check_value(result->ray_direction[1], "0", "ray direction x2");
+    check_alternative_point(result, 2, 1, "2", "1", "ray t = 2");
+    simplex_result_free(result);
+}
+
+// La columna con 0 solo tiene fraccion 0: el pivoteo extra cae en el mismo punto y la solucion es unica
+static void test_multiple_solutions_same_point(void) {
+    Problem problem;
+    problem_init(&problem);
+    problem_set_name(&problem, "Same point");
+    set_fraction(&problem.objective[0], 1, 1);
+    set_fraction(&problem.coefficients[0][0], 1, 1);
+    set_fraction(&problem.right_hand_sides[0], 1, 1);
+    set_fraction(&problem.coefficients[1][0], 1, 1);
+    set_fraction(&problem.coefficients[1][1], 1, 1);
+    set_fraction(&problem.right_hand_sides[1], 1, 1);
+
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "same point returns a result");
+    if (result == NULL) {
+        return;
+    }
+    check(result->status == SIMPLEX_OPTIMAL, "same point is optimal");
+    check(result->multiple_kind == MULTIPLE_NONE, "a degenerate extra pivot is not a second solution");
+    check_value(result->variable_values[0], "1", "same point x1");
+    check_value(result->variable_values[1], "0", "same point x2");
+    Fraction values[MAX_VARIABLES];
+    check(simplex_alternative_point(result, 2, fraction_from_int(1), values) == SIMPLEX_ERROR_INVALID_PROBLEM,
+          "no alternative point without multiple solutions");
+    simplex_result_free(result);
+}
+
+// Un problema con solucion unica no reporta soluciones multiples
+static void test_unique_solution(void) {
+    Problem problem;
+    build_wyndor_glass(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL && result->multiple_kind == MULTIPLE_NONE, "Wyndor has a unique solution");
+    simplex_result_free(result);
+}
+
+// =============================================
 // Special case tests
 // ---------------------------------------------
 
@@ -627,29 +774,26 @@ static int add_product(Fraction *total, Fraction left, Fraction right) {
     return fraction_add(*total, product, total) == FRACTION_OK;
 }
 
-// Comprueba con aritmetica exacta que una solucion optima sea factible y coherente
-static int verify_optimal_solution(const Problem *problem, const SimplexResult *result) {
-    const Table *final_table = &result->steps[result->step_count - 1].table;
+// Comprueba con aritmetica exacta que un punto sea factible y que su Z valga objective_value
+static int verify_point(const Problem *problem, const Fraction variable_values[], const Fraction slack_values[],
+                        Fraction objective_value) {
     Fraction total;
     Fraction objective_total = fraction_from_int(0);
 
-    // Todas las variables y holguras son no negativas
     for (int variable = 0; variable < problem->variable_count; variable++) {
-        if (fraction_sign(result->variable_values[variable]) < 0) {
+        if (fraction_sign(variable_values[variable]) < 0) {
             return 0;
         }
     }
     for (int slack = 0; slack < problem->constraint_count; slack++) {
-        if (fraction_sign(result->slack_values[slack]) < 0) {
+        if (fraction_sign(slack_values[slack]) < 0) {
             return 0;
         }
     }
-
-    // Cada restriccion se cumple como igualdad: suma(a * x) + holgura = lado derecho
     for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
-        total = result->slack_values[constraint];
+        total = slack_values[constraint];
         for (int variable = 0; variable < problem->variable_count; variable++) {
-            if (!add_product(&total, problem->coefficients[constraint][variable], result->variable_values[variable])) {
+            if (!add_product(&total, problem->coefficients[constraint][variable], variable_values[variable])) {
                 return 0;
             }
         }
@@ -657,14 +801,20 @@ static int verify_optimal_solution(const Problem *problem, const SimplexResult *
             return 0;
         }
     }
-
-    // Z coincide con suma(c * x)
     for (int variable = 0; variable < problem->variable_count; variable++) {
-        if (!add_product(&objective_total, problem->objective[variable], result->variable_values[variable])) {
+        if (!add_product(&objective_total, problem->objective[variable], variable_values[variable])) {
             return 0;
         }
     }
-    if (fraction_compare(objective_total, result->objective_value) != 0) {
+    return fraction_compare(objective_total, objective_value) == 0;
+}
+
+// Comprueba con aritmetica exacta que una solucion optima sea factible, coherente y cumpla la condicion de optimo
+static int verify_optimal_solution(const Problem *problem, const SimplexResult *result) {
+    const Table *final_table = &result->steps[result->step_count - 1].table;
+
+    // Factible y con el Z reportado
+    if (!verify_point(problem, result->variable_values, result->slack_values, result->objective_value)) {
         return 0;
     }
 
@@ -718,6 +868,13 @@ static int is_mirror_of(const SimplexResult *maximized, const SimplexResult *min
         }
     }
 
+    // Las soluciones multiples coinciden
+    if (maximized->multiple_kind != minimized->multiple_kind ||
+        maximized->alternative_step.entering_column != minimized->alternative_step.entering_column ||
+        maximized->alternative_step.leaving_constraint != minimized->alternative_step.leaving_constraint) {
+        return 0;
+    }
+
     // El valor optimo cambia de signo
     negated = fraction_negate(maximized->objective_value);
     return fraction_compare(negated, minimized->objective_value) == 0;
@@ -728,6 +885,7 @@ static void test_random_problems(void) {
     int optimal_count = 0;
     int unbounded_count = 0;
     int other_count = 0;
+    int multiple_count = 0;
     int sizes[4][2] = {{2, 2}, {15, 15}, {2, 15}, {15, 2}};
     char description[128];
 
@@ -773,6 +931,16 @@ static void test_random_problems(void) {
             snprintf(description, sizeof(description), "random problem %d (%d x %d) has a correct solution",
                      index, variable_count, constraint_count);
             check(verify_optimal_solution(&problem, result), description);
+
+            // La segunda solucion tambien es factible y tiene el mismo Z
+            if (result->multiple_kind == MULTIPLE_SEGMENT) {
+                multiple_count++;
+                snprintf(description, sizeof(description), "random problem %d (%d x %d) has a correct second solution",
+                         index, variable_count, constraint_count);
+                check(verify_point(&problem, result->alternative_variable_values, result->alternative_slack_values,
+                                   result->objective_value),
+                      description);
+            }
         } else if (result->status == SIMPLEX_UNBOUNDED) {
             unbounded_count++;
             check(1, description);
@@ -801,7 +969,8 @@ static void test_random_problems(void) {
         simplex_result_free(minimized);
         simplex_result_free(result);
     }
-    printf("Random problems: %d optimal, %d unbounded, %d other\n", optimal_count, unbounded_count, other_count);
+    printf("Random problems: %d optimal (%d with multiple solutions), %d unbounded, %d other\n", optimal_count,
+           multiple_count, unbounded_count, other_count);
 }
 
 // =============================================
@@ -820,6 +989,10 @@ int main(void) {
     test_minimization_example();
     test_minimization_already_optimal();
     test_minimization_unbounded();
+    test_class_multiple_solutions();
+    test_multiple_solutions_ray();
+    test_multiple_solutions_same_point();
+    test_unique_solution();
     test_dantzig_nightmare_history();
     test_iteration_limit();
     test_random_problems();

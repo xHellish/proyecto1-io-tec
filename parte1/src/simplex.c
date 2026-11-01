@@ -216,16 +216,17 @@ SimplexStatus simplex_pivot(Table *table, int leaving_constraint, int entering_c
     return SIMPLEX_RUNNING;
 }
 
-// Extrae la solucion de la tabla optima: las no basicas valen 0 y las basicas el lado derecho de su fila
-SimplexStatus simplex_extract_solution(const Problem *problem, const Table *table, SimplexResult *result) {
+// Lee la solucion de una tabla: las no basicas valen 0 y las basicas el lado derecho de su fila
+static void read_solution(const Problem *problem, const Table *table, Fraction variable_values[],
+                          Fraction slack_values[], Fraction *objective_value) {
     int right_hand_side_column = table->column_count - 1;
 
     // Todo en cero para las variables que no estan en la base
     for (int variable = 0; variable < problem->variable_count; variable++) {
-        result->variable_values[variable] = fraction_from_int(0);
+        variable_values[variable] = fraction_from_int(0);
     }
     for (int slack = 0; slack < problem->constraint_count; slack++) {
-        result->slack_values[slack] = fraction_from_int(0);
+        slack_values[slack] = fraction_from_int(0);
     }
 
     // Cada variable basica toma el valor del lado derecho de su fila
@@ -233,15 +234,123 @@ SimplexStatus simplex_extract_solution(const Problem *problem, const Table *tabl
         int column = table->basis[constraint];
         Fraction value = table->cells[constraint + 1][right_hand_side_column];
         if (table->column_types[column] == COLUMN_ORIGINAL) {
-            result->variable_values[column - 1] = value;
+            variable_values[column - 1] = value;
         } else {
-            result->slack_values[column - problem->variable_count - 1] = value;
+            slack_values[column - problem->variable_count - 1] = value;
         }
     }
 
     // El lado derecho de la fila objetivo es el valor de Z
-    result->objective_value = table->cells[0][right_hand_side_column];
+    *objective_value = table->cells[0][right_hand_side_column];
+}
+
+// Extrae la solucion de la tabla optima hacia el resultado
+SimplexStatus simplex_extract_solution(const Problem *problem, const Table *table, SimplexResult *result) {
+    read_solution(problem, table, result->variable_values, result->slack_values, &result->objective_value);
     return SIMPLEX_OPTIMAL;
+}
+
+// Indica si la columna es de una variable basica
+static int is_basic_column(const Table *table, int column) {
+    for (int constraint = 0; constraint < table->row_count - 1; constraint++) {
+        if (table->basis[constraint] == column) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+// Indica si dos soluciones tienen los mismos valores en las variables originales
+static int same_point(const Fraction first[], const Fraction second[], int variable_count) {
+    for (int variable = 0; variable < variable_count; variable++) {
+        if (fraction_compare(first[variable], second[variable]) != 0) {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+// Direccion del rayo: la variable que entra crece 1 y cada basica original baja su coeficiente en esa columna
+static void build_ray_direction(const Problem *problem, const Table *table, int entering_column,
+                                SimplexResult *result) {
+    for (int variable = 0; variable < problem->variable_count; variable++) {
+        result->ray_direction[variable] = fraction_from_int(0);
+    }
+    if (table->column_types[entering_column] == COLUMN_ORIGINAL) {
+        result->ray_direction[entering_column - 1] = fraction_from_int(1);
+    }
+    for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
+        int column = table->basis[constraint];
+        if (table->column_types[column] == COLUMN_ORIGINAL) {
+            result->ray_direction[column - 1] = fraction_negate(table->cells[constraint + 1][entering_column]);
+        }
+    }
+}
+
+// Busca soluciones multiples: una variable no basica con 0 en la fila Z permite pivotear una vez mas.
+// Prueba las columnas en orden de indice y se queda con la primera que lleva a otro punto; si ninguna
+// lo hace pero alguna no tiene fracciones validas, las soluciones forman un rayo
+static SimplexStatus find_alternative_solution(const Problem *problem, const Table *optimal_table,
+                                               SimplexResult *result) {
+    Step candidate;
+    Step ray_step;
+    int ray_column = -1;
+    Fraction objective_value;
+
+    for (int column = 1; column < optimal_table->column_count - 1; column++) {
+        // Solo variables no basicas con 0 en la fila objetivo
+        if (is_basic_column(optimal_table, column) || fraction_sign(optimal_table->cells[0][column]) != 0) {
+            continue;
+        }
+        start_step(&candidate, optimal_table);
+        candidate.entering_column = column;
+
+        // Sin fracciones validas la columna no lleva a otra tabla: se recuerda el primer rayo
+        SimplexStatus status = simplex_choose_leaving_constraint(optimal_table, column, &candidate);
+        if (status == SIMPLEX_UNBOUNDED) {
+            if (ray_column == -1) {
+                ray_column = column;
+                ray_step = candidate;
+            }
+            continue;
+        }
+        if (status != SIMPLEX_RUNNING) {
+            return status;
+        }
+        candidate.pivot = optimal_table->cells[candidate.leaving_constraint + 1][column];
+
+        // Pivotear una copia y leer la segunda solucion
+        Table next_table = *optimal_table;
+        status = simplex_pivot(&next_table, candidate.leaving_constraint, column);
+        if (status != SIMPLEX_RUNNING) {
+            return status;
+        }
+        read_solution(problem, &next_table, result->alternative_variable_values, result->alternative_slack_values,
+                      &objective_value);
+
+        // Con fraccion 0 el pivoteo cae en el mismo punto (degenerado): se prueba la siguiente columna
+        if (same_point(result->variable_values, result->alternative_variable_values, problem->variable_count)) {
+            continue;
+        }
+        result->multiple_kind = MULTIPLE_SEGMENT;
+        result->alternative_step = candidate;
+        result->alternative_table = next_table;
+        return SIMPLEX_RUNNING;
+    }
+
+    // Sin segundo punto: puede quedar un rayo de soluciones o una solucion unica
+    for (int variable = 0; variable < problem->variable_count; variable++) {
+        result->alternative_variable_values[variable] = fraction_from_int(0);
+    }
+    for (int slack = 0; slack < problem->constraint_count; slack++) {
+        result->alternative_slack_values[slack] = fraction_from_int(0);
+    }
+    if (ray_column != -1) {
+        result->multiple_kind = MULTIPLE_RAY;
+        result->alternative_step = ray_step;
+        build_ray_direction(problem, optimal_table, ray_column, result);
+    }
+    return SIMPLEX_RUNNING;
 }
 
 // =============================================
@@ -263,6 +372,14 @@ SimplexResult *simplex_solve(const Problem *problem) {
         result->slack_values[slack] = fraction_from_int(0);
     }
     result->objective_value = fraction_from_int(0);
+    for (int variable = 0; variable < MAX_VARIABLES; variable++) {
+        result->alternative_variable_values[variable] = fraction_from_int(0);
+        result->ray_direction[variable] = fraction_from_int(0);
+    }
+    for (int slack = 0; slack < MAX_CONSTRAINTS; slack++) {
+        result->alternative_slack_values[slack] = fraction_from_int(0);
+    }
+    result->multiple_kind = MULTIPLE_NONE;
 
     // Rechazar de entrada los problemas que el motor no puede resolver
     result->status = validate_problem(problem);
@@ -285,6 +402,12 @@ SimplexResult *simplex_solve(const Problem *problem) {
         int entering_column = simplex_choose_entering_column(&table);
         if (entering_column == -1) {
             status = simplex_extract_solution(problem, &table, result);
+
+            // Con el optimo, revisar si hay soluciones multiples (un error de desbordamiento reemplaza al optimo)
+            SimplexStatus alternative_status = find_alternative_solution(problem, &table, result);
+            if (alternative_status != SIMPLEX_RUNNING) {
+                status = alternative_status;
+            }
             continue;
         }
         step->entering_column = entering_column;
@@ -309,6 +432,40 @@ SimplexResult *simplex_solve(const Problem *problem) {
 
     result->status = status;
     return result;
+}
+
+// Calcula un punto del segmento o del rayo de soluciones optimas
+SimplexStatus simplex_alternative_point(const SimplexResult *result, int variable_count, Fraction parameter,
+                                        Fraction values[]) {
+    Fraction first_part;
+    Fraction second_part;
+    Fraction complement;
+
+    if (result->multiple_kind == MULTIPLE_NONE) {
+        return SIMPLEX_ERROR_INVALID_PROBLEM;
+    }
+
+    for (int variable = 0; variable < variable_count; variable++) {
+        if (result->multiple_kind == MULTIPLE_SEGMENT) {
+            // parameter * x1 + (1 - parameter) * x2
+            if (fraction_subtract(fraction_from_int(1), parameter, &complement) != FRACTION_OK ||
+                fraction_multiply(parameter, result->variable_values[variable], &first_part) != FRACTION_OK ||
+                fraction_multiply(complement, result->alternative_variable_values[variable], &second_part) !=
+                    FRACTION_OK) {
+                return SIMPLEX_ERROR_OVERFLOW;
+            }
+        } else {
+            // x1 + parameter * direccion
+            first_part = result->variable_values[variable];
+            if (fraction_multiply(parameter, result->ray_direction[variable], &second_part) != FRACTION_OK) {
+                return SIMPLEX_ERROR_OVERFLOW;
+            }
+        }
+        if (fraction_add(first_part, second_part, &values[variable]) != FRACTION_OK) {
+            return SIMPLEX_ERROR_OVERFLOW;
+        }
+    }
+    return SIMPLEX_RUNNING;
 }
 
 // Libera un resultado

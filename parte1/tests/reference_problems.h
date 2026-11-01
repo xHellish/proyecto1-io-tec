@@ -12,4 +12,7 @@ void build_wyndor_glass(Problem *problem);
 // Minimizacion de ejemplo: minimizar x1 - 3x2 con -x1 + x2 <= 2 y x1 + x2 <= 6; Z = -10 en (2, 4)
 void build_minimization_example(Problem *problem);
 
+// Soluciones multiples de clase: maximizar 2x1 + 4x2 con x1 + 2x2 <= 5 y x1 + x2 <= 4; Z = 10 en (0, 5/2) y (3, 1)
+void build_class_multiple_solutions(Problem *problem);
+
 #endif

@@ -54,6 +54,13 @@ typedef struct {
     int basis[MAX_CONSTRAINTS];
 } Table;
 
+// Soluciones multiples: ninguna, un segmento entre dos tablas finales o un rayo sin segundo vertice
+typedef enum {
+    MULTIPLE_NONE = 0,
+    MULTIPLE_SEGMENT,
+    MULTIPLE_RAY
+} MultipleKind;
+
 // Un paso del historial: la tabla con la que empieza y las decisiones tomadas sobre ella
 typedef struct {
     Table table;
@@ -77,6 +84,17 @@ typedef struct {
     Fraction variable_values[MAX_VARIABLES];
     Fraction slack_values[MAX_CONSTRAINTS];
     Fraction objective_value;
+
+    // Soluciones multiples. alternative_step es la tabla optima con la columna de 0 que entra,
+    // sus fracciones y el pivote. Con un segmento, alternative_table es la segunda tabla final y
+    // alternative_*_values su solucion. Con un rayo no hay segunda tabla y ray_direction indica
+    // cuanto cambia cada variable original por cada unidad que crece la variable que entra
+    MultipleKind multiple_kind;
+    Step alternative_step;
+    Table alternative_table;
+    Fraction alternative_variable_values[MAX_VARIABLES];
+    Fraction alternative_slack_values[MAX_CONSTRAINTS];
+    Fraction ray_direction[MAX_VARIABLES];
 } SimplexResult;
 
 // =============================================
@@ -91,6 +109,14 @@ void simplex_result_free(SimplexResult *result);
 
 // Mensaje para el usuario del estado del resultado
 const char *simplex_status_message(SimplexStatus status);
+
+// Calcula un punto optimo de las soluciones multiples (solo variables originales).
+// Segmento: parameter * solucion 1 + (1 - parameter) * solucion 2, con 0 <= parameter <= 1.
+// Rayo: solucion 1 + parameter * ray_direction, con parameter >= 0.
+// Devuelve SIMPLEX_RUNNING si sale bien, SIMPLEX_ERROR_OVERFLOW si desborda y
+// SIMPLEX_ERROR_INVALID_PROBLEM si el resultado no tiene soluciones multiples
+SimplexStatus simplex_alternative_point(const SimplexResult *result, int variable_count, Fraction parameter,
+                                        Fraction values[]);
 
 // =============================================
 // Engine pieces

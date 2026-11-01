@@ -15,4 +15,7 @@ void build_minimization_example(Problem *problem);
 // Soluciones multiples de clase: maximizar 2x1 + 4x2 con x1 + 2x2 <= 5 y x1 + x2 <= 4; Z = 10 en (0, 5/2) y (3, 1)
 void build_class_multiple_solutions(Problem *problem);
 
+// Degenerado de clase: maximizar 2x1 + x2 con 3x1 + x2 <= 6, x1 - x2 <= 2 y x2 <= 3; Z = 5 en (1, 3)
+void build_class_degenerate(Problem *problem);
+
 #endif

@@ -74,6 +74,8 @@ typedef struct {
     int ratio_is_valid[MAX_CONSTRAINTS];
     // Filas empatadas en la fraccion minima; mayor que 1 significa que se uso la regla de desempate
     int tied_row_count;
+    // Variables basicas que valen 0 en esta tabla; mayor que 0 significa BFS degenerada
+    int zero_basic_count;
 } Step;
 
 // Resultado completo: estado, historial y solucion (la solucion solo se llena si es optimo)
@@ -84,6 +86,9 @@ typedef struct {
     Fraction variable_values[MAX_VARIABLES];
     Fraction slack_values[MAX_CONSTRAINTS];
     Fraction objective_value;
+
+    // 1 si alguna tabla del historial tiene una variable basica en 0 (problema degenerado)
+    int is_degenerate;
 
     // Soluciones multiples. alternative_step es la tabla optima con la columna de 0 que entra,
     // sus fracciones y el pivote. Con un segmento, alternative_table es la segunda tabla final y
@@ -136,6 +141,9 @@ int simplex_choose_entering_column(const Table *table);
 // variable basica tenga el menor indice de columna. Devuelve SIMPLEX_UNBOUNDED si
 // ninguna fraccion es valida y SIMPLEX_ERROR_OVERFLOW si una division desborda
 SimplexStatus simplex_choose_leaving_constraint(const Table *table, int entering_column, Step *step);
+
+// Cuenta las variables basicas que valen 0 (lado derecho 0 en su fila)
+int simplex_count_zero_basics(const Table *table);
 
 // Pivotea la tabla: divide la fila del pivote entre el pivote, anula la
 // columna en las demas filas (incluida la objetivo) y actualiza la base.

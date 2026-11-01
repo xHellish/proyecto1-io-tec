@@ -694,6 +694,123 @@ static void test_unique_solution(void) {
 }
 
 // =============================================
+// Degenerate tests
+// ---------------------------------------------
+
+// Degenerado de clase con la regla del proyecto: el empate saca a s1, s2 queda basica en 0 y Z no se estanca
+static void test_class_degenerate(void) {
+    Problem problem;
+    build_class_degenerate(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "class degenerate returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_OPTIMAL, "class degenerate is optimal");
+    check(result->is_degenerate, "class degenerate is flagged as degenerate");
+    check(result->step_count == 3, "class degenerate needs 2 pivots with the lowest index rule");
+    if (result->step_count != 3) {
+        simplex_result_free(result);
+        return;
+    }
+
+    // Empate entre s1 y s2 (fraccion 2): sale s1, la de menor indice
+    check(result->steps[0].zero_basic_count == 0, "initial table is not degenerate");
+    check_step(result, 0, 1, 0, 2, "class degenerate step 0");
+
+    // s2 queda en la base valiendo 0: BFS degenerada
+    const char *second_table[] = {
+        "1", "0", "-1/3", "2/3", "0", "0", "4",
+        "0", "1", "1/3", "1/3", "0", "0", "2",
+        "0", "0", "-4/3", "-1/3", "1", "0", "0",
+        "0", "0", "1", "0", "0", "1", "3",
+    };
+    check_table(&result->steps[1].table, second_table, 4, 7, "class degenerate second table");
+    check(result->steps[1].zero_basic_count == 1, "s2 is basic and worth 0");
+    check_step(result, 1, 2, 2, 1, "class degenerate step 1");
+
+    // Mismo optimo de las diapositivas, con las filas en otro orden
+    check(result->steps[2].zero_basic_count == 0, "final table is not degenerate");
+    check_value(result->objective_value, "5", "class degenerate Z");
+    check_value(result->variable_values[0], "1", "class degenerate x1");
+    check_value(result->variable_values[1], "3", "class degenerate x2");
+    check_value(result->slack_values[1], "4", "class degenerate s2");
+    simplex_result_free(result);
+}
+
+// Camino de las diapositivas (sale s2 en el empate): las piezas del motor reproducen las 3 tablas de clase
+static void test_class_degenerate_slides_path(void) {
+    Problem problem;
+    Step step;
+    build_class_degenerate(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "slides path returns a result");
+    if (result == NULL) {
+        return;
+    }
+    Table table = result->steps[0].table;
+    simplex_result_free(result);
+
+    // Primer pivoteo como en clase: entra x1 y sale s2 (restriccion 2)
+    check(simplex_pivot(&table, 1, 1) == SIMPLEX_RUNNING, "slides path: first pivot");
+    const char *first_slide[] = {
+        "1", "0", "-3", "0", "2", "0", "4",
+        "0", "0", "4", "1", "-3", "0", "0",
+        "0", "1", "-1", "0", "1", "0", "2",
+        "0", "0", "1", "0", "0", "1", "3",
+    };
+    check_table(&table, first_slide, 4, 7, "slides path: BFS with s1 = 0");
+    check(simplex_count_zero_basics(&table) == 1, "slides path: s1 is basic and worth 0");
+
+    // Entra x2 con fraccion 0: pivoteo degenerado, Z sigue en 4
+    check(simplex_choose_entering_column(&table) == 2, "slides path: x2 enters");
+    check(simplex_choose_leaving_constraint(&table, 2, &step) == SIMPLEX_RUNNING, "slides path: a row leaves");
+    check(step.leaving_constraint == 0, "slides path: s1 leaves");
+    check_value(step.ratios[0], "0", "slides path: ratio 0/4");
+    check_value(step.ratios[2], "3", "slides path: ratio 3/1");
+    check(simplex_pivot(&table, 0, 2) == SIMPLEX_RUNNING, "slides path: degenerate pivot");
+    const char *second_slide[] = {
+        "1", "0", "0", "3/4", "-1/4", "0", "4",
+        "0", "0", "1", "1/4", "-3/4", "0", "0",
+        "0", "1", "0", "1/4", "1/4", "0", "2",
+        "0", "0", "0", "-1/4", "3/4", "1", "3",
+    };
+    check_table(&table, second_slide, 4, 7, "slides path: Z did not change");
+
+    // Entra s2 y sale s3: llega al optimo Z = 5. La diapositiva tiene 1/3 en la fila de x2, columna s1,
+    // pero esa fila es x2 + s3 = 3 (restriccion x2 <= 3), asi que el valor correcto es 0
+    check(simplex_choose_entering_column(&table) == 4, "slides path: s2 enters");
+    check(simplex_choose_leaving_constraint(&table, 4, &step) == SIMPLEX_RUNNING, "slides path: s3 can leave");
+    check(step.leaving_constraint == 2, "slides path: s3 leaves");
+    check(simplex_pivot(&table, 2, 4) == SIMPLEX_RUNNING, "slides path: last pivot");
+    const char *third_slide[] = {
+        "1", "0", "0", "2/3", "0", "1/3", "5",
+        "0", "0", "1", "0", "0", "1", "3",
+        "0", "1", "0", "1/3", "0", "-1/3", "1",
+        "0", "0", "0", "-1/3", "1", "4/3", "4",
+    };
+    check_table(&table, third_slide, 4, 7, "slides path: optimal table");
+    check(simplex_choose_entering_column(&table) == -1, "slides path: optimal");
+}
+
+// Wyndor nunca tiene variables basicas en 0; Dantzig y Beale si
+static void test_degenerate_flags(void) {
+    Problem problem;
+    SimplexResult *result;
+
+    build_wyndor_glass(&problem);
+    result = simplex_solve(&problem);
+    check(result != NULL && !result->is_degenerate, "Wyndor is not degenerate");
+    simplex_result_free(result);
+
+    build_dantzig_nightmare(&problem);
+    result = simplex_solve(&problem);
+    check(result != NULL && result->is_degenerate, "Dantzig nightmare is degenerate");
+    simplex_result_free(result);
+}
+
+// =============================================
 // Special case tests
 // ---------------------------------------------
 
@@ -750,6 +867,7 @@ static void test_iteration_limit(void) {
     }
 
     check(result->status == SIMPLEX_ITERATION_LIMIT, "Beale hits the iteration limit");
+    check(result->is_degenerate, "Beale cycles because it is degenerate");
     check(result->step_count == MAX_ITERATIONS + 1, "Beale fills the whole history");
     check_value(result->objective_value, "0", "Z stays a valid 0 when there is no optimum");
     check_value(result->variable_values[0], "0", "x1 stays a valid 0 when there is no optimum");
@@ -993,6 +1111,9 @@ int main(void) {
     test_multiple_solutions_ray();
     test_multiple_solutions_same_point();
     test_unique_solution();
+    test_class_degenerate();
+    test_class_degenerate_slides_path();
+    test_degenerate_flags();
     test_dantzig_nightmare_history();
     test_iteration_limit();
     test_random_problems();

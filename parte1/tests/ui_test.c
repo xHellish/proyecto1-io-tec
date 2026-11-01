@@ -17,6 +17,7 @@
 #define REFERENCE_WYNDOR 1
 #define REFERENCE_MINIMIZATION 2
 #define REFERENCE_MULTIPLE 3
+#define REFERENCE_DEGENERATE 4
 
 // =============================================
 // Widgets
@@ -175,6 +176,8 @@ static void on_solve_clicked(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data
         build_minimization_example(&problem);
     } else if (selected == REFERENCE_MULTIPLE) {
         build_class_multiple_solutions(&problem);
+    } else if (selected == REFERENCE_DEGENERATE) {
+        build_class_degenerate(&problem);
     } else {
         build_dantzig_nightmare(&problem);
     }

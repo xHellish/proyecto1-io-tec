@@ -186,8 +186,48 @@ static void append_decisions(GString *output, const Step *step, const Problem *p
                                    "Empate: %d filas tienen la fracción mínima; sale la variable básica de menor índice\n",
                                    step->tied_row_count);
         }
+
+        // Fraccion minima 0: la variable entra valiendo 0 y Z no cambia
+        if (fraction_sign(step->ratios[step->leaving_constraint]) == 0) {
+            g_string_append(output, "Pivoteo degenerado: la fracción mínima es 0, así que Z no mejora con este pivoteo\n");
+        }
     } else if (show_no_leaving) {
         g_string_append(output, "Sale: ninguna (la columna no tiene coeficientes positivos)\n");
+    }
+}
+
+// Agrega la lista de variables basicas que valen 0 en una tabla (BFS degenerada)
+static void append_zero_basics(GString *output, const Table *table, int variable_count) {
+    char label[NAME_BUFFER_SIZE];
+    int right_hand_side_column = table->column_count - 1;
+    int is_first = 1;
+
+    g_string_append(output, "BFS degenerada: variable básica en 0:");
+    for (int row = 1; row < table->row_count; row++) {
+        if (fraction_sign(table->cells[row][right_hand_side_column]) != 0) {
+            continue;
+        }
+        write_column_label(table, variable_count, table->basis[row - 1], label, NAME_BUFFER_SIZE);
+        if (is_first) {
+            g_string_append_printf(output, " %s", label);
+        } else {
+            g_string_append_printf(output, ", %s", label);
+        }
+        is_first = 0;
+    }
+    g_string_append(output, "\n");
+}
+
+// Agrega la explicacion del problema degenerado y, si se detuvo en el limite, del ciclo
+static void append_degenerate_summary(GString *output, const SimplexResult *result) {
+    g_string_append(output, "\nProblema degenerado: al menos una tabla tiene una variable básica que vale 0. "
+                            "En esos casos se puede pivotear sin que Z mejore, y existe el riesgo de ciclar.\n");
+    if (result->status == SIMPLEX_ITERATION_LIMIT) {
+        g_string_append_printf(output, "El Simplex repitió pivoteos sin mejorar Z y se detuvo después de %d "
+                                       "pivoteos: el problema cicló con estas reglas.\n",
+                               MAX_ITERATIONS);
+    } else {
+        g_string_append(output, "Aun así el Simplex logró salir y terminar.\n");
     }
 }
 
@@ -198,6 +238,9 @@ static void append_step(GString *output, const SimplexResult *result, const Prob
 
     g_string_append_printf(output, "Tabla %d\n", step_index);
     append_table(output, &step->table, problem->variable_count);
+    if (step->zero_basic_count > 0) {
+        append_zero_basics(output, &step->table, problem->variable_count);
+    }
 
     // Columna que entra, segun la regla de maximizar o minimizar
     if (step->entering_column == -1) {
@@ -335,5 +378,10 @@ void text_report_append(GString *output, const Problem *problem, const SimplexRe
         if (result->multiple_kind != MULTIPLE_NONE) {
             append_multiple_solutions(output, result, problem);
         }
+    }
+
+    // Explicacion del caso degenerado, con cualquier estado final
+    if (result->is_degenerate) {
+        append_degenerate_summary(output, result);
     }
 }

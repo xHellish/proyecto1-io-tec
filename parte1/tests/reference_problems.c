@@ -96,3 +96,24 @@ void build_class_multiple_solutions(Problem *problem) {
     set_fraction(&problem->coefficients[1][1], 1, 1);
     set_fraction(&problem->right_hand_sides[1], 4, 1);
 }
+
+// Degenerado de clase: x1 empata en las fracciones de las dos primeras restricciones
+void build_class_degenerate(Problem *problem) {
+    problem_init(problem);
+    problem_set_name(problem, "Degenerate (class)");
+    problem_set_sizes(problem, 2, 3);
+
+    set_fraction(&problem->objective[0], 2, 1);
+    set_fraction(&problem->objective[1], 1, 1);
+
+    set_fraction(&problem->coefficients[0][0], 3, 1);
+    set_fraction(&problem->coefficients[0][1], 1, 1);
+    set_fraction(&problem->right_hand_sides[0], 6, 1);
+
+    set_fraction(&problem->coefficients[1][0], 1, 1);
+    set_fraction(&problem->coefficients[1][1], -1, 1);
+    set_fraction(&problem->right_hand_sides[1], 2, 1);
+
+    set_fraction(&problem->coefficients[2][1], 1, 1);
+    set_fraction(&problem->right_hand_sides[2], 3, 1);
+}

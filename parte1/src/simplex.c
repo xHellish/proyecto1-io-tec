@@ -91,6 +91,7 @@ static void start_step(Step *step, const Table *table) {
     step->leaving_constraint = -1;
     step->pivot = fraction_from_int(0);
     step->tied_row_count = 0;
+    step->zero_basic_count = simplex_count_zero_basics(table);
 }
 
 // Indica si el valor de la fila objetivo mejora Z: negativo al maximizar, positivo al minimizar
@@ -176,6 +177,19 @@ SimplexStatus simplex_choose_leaving_constraint(const Table *table, int entering
         }
     }
     return SIMPLEX_RUNNING;
+}
+
+// Cuenta las variables basicas en 0: si hay alguna, la solucion basica factible es degenerada
+int simplex_count_zero_basics(const Table *table) {
+    int right_hand_side_column = table->column_count - 1;
+    int zero_count = 0;
+
+    for (int row = 1; row < table->row_count; row++) {
+        if (fraction_sign(table->cells[row][right_hand_side_column]) == 0) {
+            zero_count++;
+        }
+    }
+    return zero_count;
 }
 
 // Pivotea: deja 1 en el pivote y 0 en el resto de su columna
@@ -380,6 +394,7 @@ SimplexResult *simplex_solve(const Problem *problem) {
         result->alternative_slack_values[slack] = fraction_from_int(0);
     }
     result->multiple_kind = MULTIPLE_NONE;
+    result->is_degenerate = 0;
 
     // Rechazar de entrada los problemas que el motor no puede resolver
     result->status = validate_problem(problem);
@@ -397,6 +412,11 @@ SimplexResult *simplex_solve(const Problem *problem) {
         Step *step = &result->steps[pivot_count];
         start_step(step, &table);
         result->step_count = pivot_count + 1;
+
+        // Una variable basica en 0 en cualquier tabla hace degenerado al problema
+        if (step->zero_basic_count > 0) {
+            result->is_degenerate = 1;
+        }
 
         // Si ningun valor de la fila objetivo mejora Z la tabla es optima
         int entering_column = simplex_choose_entering_column(&table);

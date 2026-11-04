@@ -28,6 +28,13 @@
 // Posicion de "Minimizar" en la lista del objetivo
 #define OBJECTIVE_MINIMIZE_INDEX 1
 
+// Columnas del modelo de la lista de relaciones: texto y si se puede elegir
+#define RELATION_TEXT_COLUMN 0
+#define RELATION_SENSITIVE_COLUMN 1
+
+// Posicion de cada relacion en la lista (la primera es la unica habilitada)
+#define RELATION_LESS_EQUAL_INDEX 0
+
 // =============================================
 // Widgets
 // ---------------------------------------------
@@ -47,7 +54,7 @@ typedef struct {
     GtkWidget *objective_entries[MAX_VARIABLES];
     GtkWidget *coefficient_entries[MAX_CONSTRAINTS][MAX_VARIABLES];
     GtkWidget *constraint_labels[MAX_CONSTRAINTS];
-    GtkWidget *relation_labels[MAX_CONSTRAINTS];
+    GtkWidget *relation_combos[MAX_CONSTRAINTS];
     GtkWidget *right_hand_side_entries[MAX_CONSTRAINTS];
 } Widgets;
 
@@ -95,6 +102,33 @@ static GtkWidget *create_grid_label(int grid_column, int grid_row, const char *t
     return label;
 }
 
+// Crea el selector de relacion de una restriccion: ≤ habilitado; ≥ y = visibles pero deshabilitados
+static GtkWidget *create_relation_combo(int grid_column, int grid_row) {
+    const char *relation_texts[] = {"≤", "≥", "="};
+    GtkListStore *store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_BOOLEAN);
+    GtkTreeIter iter;
+
+    // Una fila por relacion; solo la primera se puede elegir en esta version
+    for (int index = 0; index < 3; index++) {
+        gtk_list_store_append(store, &iter);
+        gtk_list_store_set(store, &iter, RELATION_TEXT_COLUMN, relation_texts[index], RELATION_SENSITIVE_COLUMN,
+                           index == RELATION_LESS_EQUAL_INDEX, -1);
+    }
+
+    // El renderer toma el texto y la sensibilidad de cada fila
+    GtkWidget *combo = gtk_combo_box_new_with_model(GTK_TREE_MODEL(store));
+    g_object_unref(store);
+    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
+    gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(combo), renderer, TRUE);
+    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(combo), renderer, "text", RELATION_TEXT_COLUMN);
+    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(combo), renderer, "sensitive", RELATION_SENSITIVE_COLUMN);
+    gtk_combo_box_set_active(GTK_COMBO_BOX(combo), RELATION_LESS_EQUAL_INDEX);
+
+    gtk_widget_set_no_show_all(combo, TRUE);
+    gtk_grid_attach(GTK_GRID(widgets.model_grid), combo, grid_column, grid_row, 1, 1);
+    return combo;
+}
+
 // Crea todos los campos de la cuadricula en su tamano maximo (15 x 15)
 static void build_model_grid(void) {
     char text[NAME_BUFFER_SIZE];
@@ -122,7 +156,7 @@ static void build_model_grid(void) {
             widgets.coefficient_entries[constraint][variable] =
                 create_grid_entry(FIRST_VARIABLE_GRID_COLUMN + variable, grid_row, "0");
         }
-        widgets.relation_labels[constraint] = create_grid_label(RELATION_GRID_COLUMN, grid_row, "≤", TRUE);
+        widgets.relation_combos[constraint] = create_relation_combo(RELATION_GRID_COLUMN, grid_row);
         widgets.right_hand_side_entries[constraint] =
             create_grid_entry(RIGHT_HAND_SIDE_GRID_COLUMN, grid_row, "0");
     }
@@ -192,6 +226,14 @@ static int build_problem_from_form(Problem *problem, char *message, size_t messa
                 return 0;
             }
         }
+        // Solo "≤" es elegible; cualquier otra relacion se rechaza con un mensaje claro
+        if (gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.relation_combos[constraint])) !=
+            RELATION_LESS_EQUAL_INDEX) {
+            snprintf(message, message_size, "Restricción %d: en esta versión solo se permite la relación ≤.",
+                     constraint + 1);
+            return 0;
+        }
+        problem->constraint_types[constraint] = CONSTRAINT_LESS_EQUAL;
         snprintf(field_description, sizeof(field_description), "Restricción %d, lado derecho", constraint + 1);
         if (!read_number(widgets.right_hand_side_entries[constraint], field_description,
                          &problem->right_hand_sides[constraint], message, message_size)) {
@@ -223,7 +265,7 @@ static void on_sizes_changed(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data
     for (int constraint = 0; constraint < MAX_CONSTRAINTS; constraint++) {
         gboolean row_is_active = constraint < constraint_count;
         gtk_widget_set_visible(widgets.constraint_labels[constraint], row_is_active);
-        gtk_widget_set_visible(widgets.relation_labels[constraint], row_is_active);
+        gtk_widget_set_visible(widgets.relation_combos[constraint], row_is_active);
         gtk_widget_set_visible(widgets.right_hand_side_entries[constraint], row_is_active);
         for (int variable = 0; variable < MAX_VARIABLES; variable++) {
             gboolean cell_is_active = row_is_active && variable < variable_count;

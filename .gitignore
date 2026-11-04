@@ -74,3 +74,5 @@ simplex_asan
 test_model
 test_simplex
 ui_test
+test_report
+test_gui

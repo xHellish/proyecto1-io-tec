@@ -494,7 +494,7 @@ static void test_sample_problems(void) {
     char description[160];
     char message[MESSAGE_BUFFER_SIZE];
 
-    check(sample_problem_count() == 10, "there are 10 sample problems");
+    check(sample_problem_count() == 11, "there are 11 sample problems");
     check(sample_problem_get(-1) == NULL, "negative sample index returns NULL");
     check(sample_problem_get(sample_problem_count()) == NULL, "sample index past the end returns NULL");
 
@@ -523,6 +523,55 @@ static void test_sample_problems(void) {
         }
         simplex_result_free(result);
     }
+}
+
+// El ejemplo de 15 x 15 del menu: pivoteos, valor de cada variable y holgura, sin empates ni soluciones multiples
+static void test_maximum_size_sample(void) {
+    const char *expected_variables[] = {"5", "0", "0", "0", "15", "25", "0", "0",
+                                        "10", "0", "10", "0", "20", "20", "0"};
+    const char *expected_slacks[] = {"10", "40", "35", "0", "20", "0", "0", "0",
+                                     "45", "10", "90", "0", "0", "15", "0"};
+    const SampleProblem *sample = NULL;
+    char description[80];
+    Problem problem;
+
+    // Buscar el ejemplo por tamano para no depender de su posicion en el menu
+    for (int index = 0; index < sample_problem_count(); index++) {
+        const SampleProblem *candidate = sample_problem_get(index);
+        if (candidate->variable_count == MAX_VARIABLES && candidate->constraint_count == MAX_CONSTRAINTS) {
+            sample = candidate;
+        }
+    }
+    check(sample != NULL, "there is a 15 x 15 sample problem");
+    if (sample == NULL) {
+        return;
+    }
+
+    // Resolver con los mismos textos que escribe la ventana
+    check(build_problem_from_sample(sample, &problem), "15 x 15 sample parses");
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "15 x 15 sample returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    // Camino del Simplex: 12 pivoteos, sin degeneracion ni soluciones multiples
+    check(result->status == SIMPLEX_OPTIMAL, "15 x 15 sample is optimal");
+    check(result->step_count == 13, "15 x 15 sample takes 12 pivots");
+    check(!result->is_degenerate, "15 x 15 sample is not degenerate");
+    check(result->multiple_kind == MULTIPLE_NONE, "15 x 15 sample has a unique solution");
+
+    // Solucion completa
+    check_value(result->objective_value, "725", "15 x 15 sample Z");
+    for (int variable = 0; variable < MAX_VARIABLES; variable++) {
+        snprintf(description, sizeof(description), "15 x 15 sample x%d", variable + 1);
+        check_value(result->variable_values[variable], expected_variables[variable], description);
+    }
+    for (int constraint = 0; constraint < MAX_CONSTRAINTS; constraint++) {
+        snprintf(description, sizeof(description), "15 x 15 sample s%d", constraint + 1);
+        check_value(result->slack_values[constraint], expected_slacks[constraint], description);
+    }
+    simplex_result_free(result);
 }
 
 // Chvatal: 3 variables, una fila con coeficiente 0 en la columna que entra y optimo Z = 13
@@ -1406,6 +1455,7 @@ int main(void) {
     test_dantzig_nightmare_history();
     test_iteration_limit();
     test_sample_problems();
+    test_maximum_size_sample();
     test_random_problems();
 
     printf("%d checks run, %d failed\n", checks_run, checks_failed);

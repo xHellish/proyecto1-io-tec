@@ -5,7 +5,8 @@
 // =============================================
 // Sample problems
 // ---------------------------------------------
-// Problemas resueltos a mano en el cuaderno de clase; los resultados se verifican en tests/test_simplex.c
+// Problemas resueltos a mano en el cuaderno de clase, mas uno de 15 x 15 para probar el tamano maximo
+// (ese no viene del cuaderno); los resultados se verifican en tests/test_simplex.c
 static const SampleProblem SAMPLE_PROBLEMS[] = {
     {
         .title = "Maximización 2 × 2 (cuaderno 04/09)",
@@ -42,6 +43,37 @@ static const SampleProblem SAMPLE_PROBLEMS[] = {
         .right_hand_sides = {"48", "20", "8", "5"},
         .expected = "Z = 280 con x1 = 2, x2 = 0, x3 = 8, s1 = 24 y s4 = 5.",
         .expected_objective = "280",
+    },
+    {
+        // Generado para probar 15 variables y 15 restricciones: 12 pivoteos, sin empates ni
+        // soluciones multiples, y fracciones pequenas (denominador maximo 36) para que las tablas se lean
+        .title = "Tamaño máximo 15 × 15 (de prueba, no es del cuaderno)",
+        .name = "Tamaño máximo 15 x 15",
+        .objective_type = OBJECTIVE_MAXIMIZE,
+        .variable_count = 15,
+        .constraint_count = 15,
+        .objective = {"7", "4", "1", "3", "1", "9", "3", "8", "6", "9", "5", "9", "8", "9", "8"},
+        .coefficients =
+            {
+                {NULL, "2", "3", NULL, NULL, NULL, NULL, "2", NULL, "2", NULL, "3", NULL, "1", "4"},
+                {NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "4", NULL, NULL, NULL, NULL},
+                {"1", NULL, "2", NULL, NULL, NULL, NULL, "1", NULL, NULL, NULL, NULL, NULL, NULL, "3"},
+                {NULL, "3", NULL, NULL, NULL, NULL, NULL, "3", NULL, NULL, "1", NULL, NULL, "1", NULL},
+                {"2", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, "1", "1", NULL, NULL},
+                {NULL, NULL, NULL, NULL, NULL, NULL, NULL, "3", NULL, "3", NULL, "2", "1", NULL, "3"},
+                {"4", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL},
+                {NULL, NULL, "2", NULL, NULL, "2", "3", NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL},
+                {"1", "2", NULL, NULL, NULL, NULL, "2", "2", NULL, NULL, NULL, "2", NULL, NULL, NULL},
+                {NULL, NULL, "1", NULL, NULL, NULL, NULL, NULL, "3", NULL, "4", NULL, NULL, NULL, "2"},
+                {NULL, "2", NULL, "1", NULL, NULL, NULL, NULL, NULL, NULL, "1", "1", NULL, NULL, NULL},
+                {NULL, NULL, "1", NULL, NULL, NULL, NULL, NULL, "3", NULL, NULL, NULL, NULL, NULL, NULL},
+                {NULL, NULL, NULL, "4", "1", "1", NULL, NULL, NULL, "2", NULL, NULL, NULL, NULL, NULL},
+                {NULL, NULL, NULL, "2", NULL, "1", NULL, "1", NULL, NULL, "3", NULL, NULL, NULL, NULL},
+                {NULL, "4", NULL, NULL, NULL, NULL, "4", "2", "1", "4", "1", NULL, NULL, "4", "1"},
+            },
+        .right_hand_sides = {"30", "80", "40", "30", "50", "20", "20", "50", "50", "80", "100", "30", "40", "70", "100"},
+        .expected = "Z = 725 con x1 = 5, x5 = 15, x6 = 25, x9 = 10, x11 = 10, x13 = 20 y x14 = 20 (12 pivoteos).",
+        .expected_objective = "725",
     },
     {
         .title = "Minimización (cuaderno 09/09)",

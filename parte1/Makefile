@@ -99,10 +99,22 @@ GUI_SOURCES = $(SRC_DIR)/fraction.c $(SRC_DIR)/problem.c $(SRC_DIR)/simplex.c $(
 $(TEST_GUI): $(TEST_DIR)/test_gui.c $(GUI_SOURCES) $(HEADERS)
 	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) $(SANITIZE) -I$(SRC_DIR) $(GTK_CFLAGS) $(TEST_DIR)/test_gui.c $(GUI_SOURCES) -o $@ $(GTK_LIBS) -lm
 
+test_gui_run: $(TEST_GUI)
+	./$(TEST_GUI) ui/main_window.glade $(GUI_DIR)
+
 # Ventana de prueba para ver el modelo y el motor (requiere GTK; se abre con ./ui_test).
 # El objetivo se llama igual que el binario, asi que no es .PHONY
 $(UI_TEST): $(TEST_DIR)/ui_test.c $(REFERENCE_SOURCES) $(REPORT_SOURCES) $(HEADERS) $(REFERENCE_HEADERS)
 	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -I$(SRC_DIR) -I$(TEST_DIR) $(GTK_CFLAGS) $(TEST_DIR)/ui_test.c $(REFERENCE_SOURCES) $(REPORT_SOURCES) -o $@ $(GTK_LIBS)
+
+# =============================================
+# Delivery package
+# ---------------------------------------------
+DIST_NAME = proyecto1-simplex
+
+# Crea ../proyecto1-simplex.tgz solo con fuentes, .glade, logo, Makefile y README (sin tests ni salida)
+dist: clean
+	tar -czf ../$(DIST_NAME).tgz --transform 's,^,$(DIST_NAME)/,' Makefile README.md $(SRC_DIR) ui assets
 
 # =============================================
 # Cleanup
@@ -116,4 +128,4 @@ clean:
 	rm -f $(SRC_DIR)/*.o $(TARGET) $(TARGET)_debug $(TARGET)_asan $(TEST_MODEL) $(TEST_SIMPLEX) $(UI_TEST) $(TEST_REPORT) $(TEST_GUI)
 	rm -f $(OUTPUT_DIR)/*.aux $(OUTPUT_DIR)/*.log
 
-.PHONY: all debug asan test test_report_run clean
+.PHONY: all debug asan test test_report_run test_gui_run clean dist

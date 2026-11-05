@@ -120,6 +120,18 @@ static void test_reference_problems(void) {
     expect_compiles(&problem, "ref_multiple");
     build_class_degenerate(&problem);
     expect_compiles(&problem, "ref_degenerate");
+    build_class_notes_maximization(&problem);
+    expect_compiles(&problem, "ref_class_notes");
+    build_dakota(&problem);
+    expect_compiles(&problem, "ref_dakota");
+    build_dakota_multiple(&problem);
+    expect_compiles(&problem, "ref_dakota_multiple");
+    build_class_four_fourteen(&problem);
+    expect_compiles(&problem, "ref_four_fourteen");
+    build_class_minimization(&problem);
+    expect_compiles(&problem, "ref_class_minimization");
+    build_breadco_unbounded(&problem);
+    expect_compiles(&problem, "ref_breadco");
 }
 
 // Problema no acotado: maximizar x1 + x2 con x1 - x2 <= 1 y x1 - 2x2 <= 2 (x1 puede crecer sin limite)

@@ -279,6 +279,179 @@ static void test_wyndor_glass(void) {
     simplex_result_free(result);
 }
 
+// Cuaderno de clase (04/09): las 3 tablas coinciden con las hechas a mano, Z = 140 en (20, 20)
+static void test_class_notes_maximization(void) {
+    Problem problem;
+    build_class_notes_maximization(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "Class notes returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_OPTIMAL, "Class notes is optimal");
+    check(result->step_count == 3, "Class notes has 3 tables");
+    if (result->step_count != 3) {
+        simplex_result_free(result);
+        return;
+    }
+
+    const char *table_0[] = {
+        "1", "-3", "-4", "0", "0", "0",
+        "0", "1", "1", "1", "0", "40",
+        "0", "1", "2", "0", "1", "60",
+    };
+    const char *table_1[] = {
+        "1", "-1", "0", "0", "2", "120",
+        "0", "1/2", "0", "1", "-1/2", "10",
+        "0", "1/2", "1", "0", "1/2", "30",
+    };
+    const char *table_2[] = {
+        "1", "0", "0", "2", "1", "140",
+        "0", "1", "0", "2", "-1", "20",
+        "0", "0", "1", "-1", "1", "20",
+    };
+    check_table(&result->steps[0].table, table_0, 3, 6, "Class notes table 0");
+    check_table(&result->steps[1].table, table_1, 3, 6, "Class notes table 1");
+    check_table(&result->steps[2].table, table_2, 3, 6, "Class notes table 2");
+
+    check_step(result, 0, 2, 1, 1, "Class notes step 0");
+    check_step(result, 1, 1, 0, 1, "Class notes step 1");
+    check_step(result, 2, -1, -1, 0, "Class notes step 2");
+    check_value(result->steps[0].ratios[0], "40", "Class notes step 0: ratio of constraint 1");
+    check_value(result->steps[0].ratios[1], "30", "Class notes step 0: ratio of constraint 2");
+    check_value(result->steps[0].pivot, "2", "Class notes step 0: pivot");
+
+    const int final_basis[] = {1, 2};
+    check_basis(&result->steps[2].table, final_basis, 2, "Class notes final basis");
+    check_value(result->objective_value, "140", "Class notes Z");
+    check_value(result->variable_values[0], "20", "Class notes x1");
+    check_value(result->variable_values[1], "20", "Class notes x2");
+    check_value(result->slack_values[0], "0", "Class notes s1");
+    check_value(result->slack_values[1], "0", "Class notes s2");
+    simplex_result_free(result);
+}
+
+// Dakota (tarea de clase): 3 variables y 4 restricciones con decimales; Z = 280 en (2, 0, 8)
+static void test_dakota(void) {
+    Problem problem;
+    build_dakota(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "Dakota returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_OPTIMAL, "Dakota is optimal");
+    check(result->step_count == 3, "Dakota has 3 tables");
+    check(result->multiple_kind == MULTIPLE_NONE, "Dakota has a unique solution");
+    check_step(result, 0, 1, 2, 1, "Dakota step 0");
+    check_step(result, 1, 3, 1, 1, "Dakota step 1");
+    check_value(result->objective_value, "280", "Dakota Z");
+    check_value(result->variable_values[0], "2", "Dakota x1");
+    check_value(result->variable_values[1], "0", "Dakota x2");
+    check_value(result->variable_values[2], "8", "Dakota x3");
+    check_value(result->slack_values[0], "24", "Dakota s1");
+    check_value(result->slack_values[3], "5", "Dakota s4");
+    simplex_result_free(result);
+}
+
+// Dakota con x2 en 35 (cuaderno 09/09): soluciones multiples entre (2, 0, 8) y (0, 1.6, 11.2)
+static void test_dakota_multiple(void) {
+    Problem problem;
+    build_dakota_multiple(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "Dakota multiple returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_OPTIMAL, "Dakota multiple is optimal");
+    check(result->multiple_kind == MULTIPLE_SEGMENT, "Dakota multiple has a segment of solutions");
+    check_value(result->objective_value, "280", "Dakota multiple Z");
+    check_value(result->variable_values[0], "2", "Dakota multiple first x1");
+    check_value(result->variable_values[1], "0", "Dakota multiple first x2");
+    check_value(result->variable_values[2], "8", "Dakota multiple first x3");
+    check_value(result->alternative_variable_values[0], "0", "Dakota multiple second x1");
+    check_value(result->alternative_variable_values[1], "8/5", "Dakota multiple second x2");
+    check_value(result->alternative_variable_values[2], "56/5", "Dakota multiple second x3");
+    simplex_result_free(result);
+}
+
+// Cuaderno: maximizar 4x1 + 14x2; soluciones multiples entre (0, 3) y (7/3, 7/3) con Z = 42
+static void test_class_four_fourteen(void) {
+    Problem problem;
+    build_class_four_fourteen(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "four fourteen returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_OPTIMAL, "four fourteen is optimal");
+    check(result->step_count == 2, "four fourteen reaches the optimum in 1 pivot");
+    if (result->step_count != 2) {
+        simplex_result_free(result);
+        return;
+    }
+
+    const char *table_0[] = {
+        "1", "-4", "-14", "0", "0", "0",
+        "0", "2", "7", "1", "0", "21",
+        "0", "7", "2", "0", "1", "21",
+    };
+    check_table(&result->steps[0].table, table_0, 3, 6, "four fourteen table 0");
+    check(result->multiple_kind == MULTIPLE_SEGMENT, "four fourteen has a segment of solutions");
+    check_value(result->objective_value, "42", "four fourteen Z");
+    check_value(result->variable_values[0], "0", "four fourteen first x1");
+    check_value(result->variable_values[1], "3", "four fourteen first x2");
+    check_value(result->alternative_variable_values[0], "7/3", "four fourteen second x1");
+    check_value(result->alternative_variable_values[1], "7/3", "four fourteen second x2");
+    simplex_result_free(result);
+}
+
+// Panaderia BreadCo (cuaderno): las 3 tablas coinciden con las hechas a mano y x3 no tiene fracciones validas
+static void test_breadco_unbounded(void) {
+    Problem problem;
+    build_breadco_unbounded(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "BreadCo returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_UNBOUNDED, "BreadCo is unbounded");
+    check(result->step_count == 3, "BreadCo has 3 tables");
+    if (result->step_count != 3) {
+        simplex_result_free(result);
+        return;
+    }
+
+    const char *table_0[] = {
+        "1", "-36", "-30", "3", "4", "0", "0", "0",
+        "0", "1", "1", "-1", "0", "1", "0", "5",
+        "0", "6", "5", "0", "-1", "0", "1", "10",
+    };
+    const char *table_1[] = {
+        "1", "0", "0", "3", "-2", "0", "6", "60",
+        "0", "0", "1/6", "-1", "1/6", "1", "-1/6", "10/3",
+        "0", "1", "5/6", "0", "-1/6", "0", "1/6", "5/3",
+    };
+    const char *table_2[] = {
+        "1", "0", "2", "-9", "0", "12", "4", "100",
+        "0", "0", "1", "-6", "1", "6", "-1", "20",
+        "0", "1", "1", "-1", "0", "1", "0", "5",
+    };
+    check_table(&result->steps[0].table, table_0, 3, 8, "BreadCo table 0");
+    check_table(&result->steps[1].table, table_1, 3, 8, "BreadCo table 1");
+    check_table(&result->steps[2].table, table_2, 3, 8, "BreadCo table 2");
+
+    check_step(result, 0, 1, 1, 1, "BreadCo step 0");
+    check_step(result, 1, 4, 0, 1, "BreadCo step 1");
+    check_step(result, 2, 3, -1, 0, "BreadCo step 2");
+    simplex_result_free(result);
+}
+
 // Chvatal: 3 variables, una fila con coeficiente 0 en la columna que entra y optimo Z = 13
 static void test_chvatal(void) {
     Problem problem;
@@ -488,6 +661,43 @@ static void test_minimization_example(void) {
     check_value(result->variable_values[1], "4", "minimization x2");
     check_value(result->slack_values[0], "0", "minimization s1");
     check_value(result->slack_values[1], "0", "minimization s2");
+    simplex_result_free(result);
+}
+
+// Minimizacion del cuaderno (09/09) con el segundo algoritmo: entra x2 (3) y Z = -12 en (0, 4)
+static void test_class_minimization(void) {
+    Problem problem;
+    build_class_minimization(&problem);
+    SimplexResult *result = simplex_solve(&problem);
+    check(result != NULL, "class minimization returns a result");
+    if (result == NULL) {
+        return;
+    }
+
+    check(result->status == SIMPLEX_OPTIMAL, "class minimization is optimal");
+    check(result->step_count == 2, "class minimization has 2 tables");
+    if (result->step_count != 2) {
+        simplex_result_free(result);
+        return;
+    }
+
+    const char *table_0[] = {
+        "1", "-2", "3", "0", "0", "0",
+        "0", "1", "1", "1", "0", "4",
+        "0", "1", "-1", "0", "1", "6",
+    };
+    const char *table_1[] = {
+        "1", "-5", "0", "-3", "0", "-12",
+        "0", "1", "1", "1", "0", "4",
+        "0", "2", "0", "1", "1", "10",
+    };
+    check_table(&result->steps[0].table, table_0, 3, 6, "class minimization table 0");
+    check_table(&result->steps[1].table, table_1, 3, 6, "class minimization table 1");
+    check_step(result, 0, 2, 0, 1, "class minimization step 0");
+    check_value(result->objective_value, "-12", "class minimization Z");
+    check_value(result->variable_values[0], "0", "class minimization x1");
+    check_value(result->variable_values[1], "4", "class minimization x2");
+    check_value(result->slack_values[1], "10", "class minimization s2");
     simplex_result_free(result);
 }
 
@@ -1100,11 +1310,17 @@ int main(void) {
     test_initial_table();
     test_rejected_problems();
     test_wyndor_glass();
+    test_class_notes_maximization();
+    test_dakota();
+    test_dakota_multiple();
+    test_class_four_fourteen();
+    test_breadco_unbounded();
     test_chvatal();
     test_fractional_optimum();
     test_zero_objective();
     test_unbounded();
     test_minimization_example();
+    test_class_minimization();
     test_minimization_already_optimal();
     test_minimization_unbounded();
     test_class_multiple_solutions();

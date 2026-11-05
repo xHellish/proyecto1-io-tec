@@ -72,8 +72,8 @@ test: $(TEST_MODEL) $(TEST_SIMPLEX)
 $(TEST_MODEL): $(TEST_DIR)/test_model.c $(MODEL_SOURCES) $(HEADERS)
 	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -I$(SRC_DIR) $(TEST_DIR)/test_model.c $(MODEL_SOURCES) -o $@
 
-$(TEST_SIMPLEX): $(TEST_DIR)/test_simplex.c $(REFERENCE_SOURCES) $(ENGINE_SOURCES) $(HEADERS) $(REFERENCE_HEADERS)
-	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -I$(SRC_DIR) -I$(TEST_DIR) $(TEST_DIR)/test_simplex.c $(REFERENCE_SOURCES) $(ENGINE_SOURCES) -o $@
+$(TEST_SIMPLEX): $(TEST_DIR)/test_simplex.c $(REFERENCE_SOURCES) $(ENGINE_SOURCES) $(SRC_DIR)/sample_problems.c $(HEADERS) $(REFERENCE_HEADERS)
+	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) -I$(SRC_DIR) -I$(TEST_DIR) $(TEST_DIR)/test_simplex.c $(REFERENCE_SOURCES) $(ENGINE_SOURCES) $(SRC_DIR)/sample_problems.c -o $@
 
 # Prueba de punta a punta sin ventana: genera y compila con pdflatex muchos documentos
 # (requiere pdflatex). Uso: make test_report REPORT_DIR=/ruta/de/salida
@@ -94,7 +94,7 @@ test_report_run: $(TEST_REPORT)
 # Uso: make test_gui GUI_DIR=/ruta/de/salida
 TEST_GUI = test_gui
 GUI_DIR ?= /tmp/test_gui_output
-GUI_SOURCES = $(SRC_DIR)/fraction.c $(SRC_DIR)/problem.c $(SRC_DIR)/simplex.c $(SRC_DIR)/latex_report.c $(SRC_DIR)/launcher.c $(SRC_DIR)/main_window.c
+GUI_SOURCES = $(SRC_DIR)/fraction.c $(SRC_DIR)/problem.c $(SRC_DIR)/simplex.c $(SRC_DIR)/latex_report.c $(SRC_DIR)/launcher.c $(SRC_DIR)/main_window.c $(SRC_DIR)/sample_problems.c
 
 $(TEST_GUI): $(TEST_DIR)/test_gui.c $(GUI_SOURCES) $(HEADERS)
 	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) $(SANITIZE) -I$(SRC_DIR) $(GTK_CFLAGS) $(TEST_DIR)/test_gui.c $(GUI_SOURCES) -o $@ $(GTK_LIBS) -lm

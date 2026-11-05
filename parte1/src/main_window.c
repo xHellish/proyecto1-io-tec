@@ -6,6 +6,7 @@
 #include "problem.h"
 #include "latex_report.h"
 #include "launcher.h"
+#include "sample_problems.h"
 #include "simplex.h"
 
 // =============================================
@@ -35,6 +36,12 @@
 // Posicion de cada relacion en la lista (la primera es la unica habilitada)
 #define RELATION_LESS_EQUAL_INDEX 0
 
+// Posicion de "Maximizar" en la lista del objetivo
+#define OBJECTIVE_MAXIMIZE_INDEX 0
+
+// La primera opcion del menu de ejemplos es solo una indicacion; los problemas empiezan despues
+#define SAMPLE_PLACEHOLDER_INDEX 0
+
 // =============================================
 // Widgets
 // ---------------------------------------------
@@ -48,6 +55,7 @@ typedef struct {
     GtkWidget *intermediate_check;
     GtkWidget *solve_button;
     GtkWidget *status_label;
+    GtkWidget *sample_combo;
 
     // Cuadricula creada una sola vez en su tamano maximo; solo se muestra la parte activa
     GtkWidget *name_entries[MAX_VARIABLES];
@@ -159,6 +167,46 @@ static void build_model_grid(void) {
         widgets.relation_combos[constraint] = create_relation_combo(RELATION_GRID_COLUMN, grid_row);
         widgets.right_hand_side_entries[constraint] =
             create_grid_entry(RIGHT_HAND_SIDE_GRID_COLUMN, grid_row, "0");
+    }
+}
+
+// Devuelve el texto de una celda de ejemplo; una celda NULL queda vacia (vale 0)
+static const char *sample_cell_text(const char *text) {
+    if (text == NULL) {
+        return "";
+    }
+    return text;
+}
+
+// Llena todo el formulario con un problema del cuaderno
+static void fill_form_from_sample(const SampleProblem *sample) {
+    char text[NAME_BUFFER_SIZE];
+
+    // Nombre, objetivo y cantidades; los selectores de cantidad muestran u ocultan la cuadricula
+    gtk_entry_set_text(GTK_ENTRY(widgets.problem_name_entry), sample->name);
+    if (sample->objective_type == OBJECTIVE_MINIMIZE) {
+        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.objective_combo), OBJECTIVE_MINIMIZE_INDEX);
+    } else {
+        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.objective_combo), OBJECTIVE_MAXIMIZE_INDEX);
+    }
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.variables_spin), sample->variable_count);
+    gtk_spin_button_set_value(GTK_SPIN_BUTTON(widgets.constraints_spin), sample->constraint_count);
+
+    // Toda la cuadricula (tambien la oculta) se reescribe para no mezclar datos de otro problema
+    for (int variable = 0; variable < MAX_VARIABLES; variable++) {
+        problem_default_variable_name(variable, text, NAME_BUFFER_SIZE);
+        gtk_entry_set_text(GTK_ENTRY(widgets.name_entries[variable]), text);
+        gtk_entry_set_text(GTK_ENTRY(widgets.objective_entries[variable]),
+                           sample_cell_text(sample->objective[variable]));
+    }
+    for (int constraint = 0; constraint < MAX_CONSTRAINTS; constraint++) {
+        for (int variable = 0; variable < MAX_VARIABLES; variable++) {
+            gtk_entry_set_text(GTK_ENTRY(widgets.coefficient_entries[constraint][variable]),
+                               sample_cell_text(sample->coefficients[constraint][variable]));
+        }
+        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.relation_combos[constraint]), RELATION_LESS_EQUAL_INDEX);
+        gtk_entry_set_text(GTK_ENTRY(widgets.right_hand_side_entries[constraint]),
+                           sample_cell_text(sample->right_hand_sides[constraint]));
     }
 }
 
@@ -274,6 +322,26 @@ static void on_sizes_changed(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data
     }
 }
 
+// Carga el problema del cuaderno elegido en el menu y muestra el resultado esperado
+static void on_sample_changed(GtkWidget *widget G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED) {
+    int active = gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.sample_combo));
+
+    // La opcion de indicacion no carga nada
+    if (active <= SAMPLE_PLACEHOLDER_INDEX) {
+        return;
+    }
+    const SampleProblem *sample = sample_problem_get(active - 1);
+    if (sample == NULL) {
+        show_error_dialog("El ejemplo elegido no existe.");
+        return;
+    }
+
+    fill_form_from_sample(sample);
+    gchar *status = g_strdup_printf("Ejemplo cargado. Esperado: %s", sample->expected);
+    gtk_label_set_text(GTK_LABEL(widgets.status_label), status);
+    g_free(status);
+}
+
 // Escribe el .tex del resultado, lo compila y abre el PDF; si algo falla escribe el motivo en message
 static int publish_result(const Problem *problem, const SimplexResult *result, char *message, size_t message_size) {
     char base_name[MAX_NAME_LENGTH + 1];
@@ -348,6 +416,7 @@ const char *main_window_setup(GtkBuilder *builder, GtkWidget *window, const char
         {"intermediate_check", &widgets.intermediate_check},
         {"solve_button", &widgets.solve_button},
         {"status_label", &widgets.status_label},
+        {"sample_combo", &widgets.sample_combo},
     };
     int binding_count = (int)(sizeof(bindings) / sizeof(bindings[0]));
 
@@ -366,9 +435,17 @@ const char *main_window_setup(GtkBuilder *builder, GtkWidget *window, const char
     build_model_grid();
     on_sizes_changed(NULL, NULL);
 
+    // Menu de ejemplos: una indicacion y luego un problema del cuaderno por opcion
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.sample_combo), "Elegir un problema para cargarlo...");
+    for (int index = 0; index < sample_problem_count(); index++) {
+        gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.sample_combo), sample_problem_get(index)->title);
+    }
+    gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.sample_combo), SAMPLE_PLACEHOLDER_INDEX);
+
     // Senales
     g_signal_connect(widgets.variables_spin, "value-changed", G_CALLBACK(on_sizes_changed), NULL);
     g_signal_connect(widgets.constraints_spin, "value-changed", G_CALLBACK(on_sizes_changed), NULL);
     g_signal_connect(widgets.solve_button, "clicked", G_CALLBACK(on_solve_clicked), NULL);
+    g_signal_connect(widgets.sample_combo, "changed", G_CALLBACK(on_sample_changed), NULL);
     return NULL;
 }

@@ -5,6 +5,7 @@
 #include "fraction.h"
 #include "problem.h"
 #include "reference_problems.h"
+#include "sample_problems.h"
 #include "simplex.h"
 
 // =============================================
@@ -450,6 +451,78 @@ static void test_breadco_unbounded(void) {
     check_step(result, 1, 4, 0, 1, "BreadCo step 1");
     check_step(result, 2, 3, -1, 0, "BreadCo step 2");
     simplex_result_free(result);
+}
+
+// Lee una celda de ejemplo como lo hace la ventana: NULL o vacia vale 0
+static int parse_sample_cell(const char *text, Fraction *value) {
+    if (text == NULL) {
+        *value = fraction_from_int(0);
+        return 1;
+    }
+    return fraction_parse(text, value) == FRACTION_OK;
+}
+
+// Arma el problema con los textos de un ejemplo del menu; devuelve 0 si alguna celda no se puede leer
+static int build_problem_from_sample(const SampleProblem *sample, Problem *problem) {
+    int is_valid = 1;
+
+    problem_init(problem);
+    problem_set_sizes(problem, sample->variable_count, sample->constraint_count);
+    problem_set_name(problem, sample->name);
+    problem->objective_type = sample->objective_type;
+    for (int variable = 0; variable < sample->variable_count; variable++) {
+        if (!parse_sample_cell(sample->objective[variable], &problem->objective[variable])) {
+            is_valid = 0;
+        }
+    }
+    for (int constraint = 0; constraint < sample->constraint_count; constraint++) {
+        for (int variable = 0; variable < sample->variable_count; variable++) {
+            if (!parse_sample_cell(sample->coefficients[constraint][variable],
+                                   &problem->coefficients[constraint][variable])) {
+                is_valid = 0;
+            }
+        }
+        if (!parse_sample_cell(sample->right_hand_sides[constraint], &problem->right_hand_sides[constraint])) {
+            is_valid = 0;
+        }
+    }
+    return is_valid;
+}
+
+// Cada ejemplo del menu de la ventana se lee, pasa la validacion y da el resultado anotado
+static void test_sample_problems(void) {
+    char description[160];
+    char message[MESSAGE_BUFFER_SIZE];
+
+    check(sample_problem_count() == 10, "there are 10 sample problems");
+    check(sample_problem_get(-1) == NULL, "negative sample index returns NULL");
+    check(sample_problem_get(sample_problem_count()) == NULL, "sample index past the end returns NULL");
+
+    for (int index = 0; index < sample_problem_count(); index++) {
+        const SampleProblem *sample = sample_problem_get(index);
+        Problem problem;
+
+        snprintf(description, sizeof(description), "sample '%s' parses", sample->title);
+        check(build_problem_from_sample(sample, &problem), description);
+        snprintf(description, sizeof(description), "sample '%s' is valid", sample->title);
+        check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_OK, description);
+
+        SimplexResult *result = simplex_solve(&problem);
+        check(result != NULL, "sample returns a result");
+        if (result == NULL) {
+            continue;
+        }
+        if (sample->expected_objective == NULL) {
+            snprintf(description, sizeof(description), "sample '%s' is unbounded", sample->title);
+            check(result->status == SIMPLEX_UNBOUNDED, description);
+        } else {
+            snprintf(description, sizeof(description), "sample '%s' is optimal", sample->title);
+            check(result->status == SIMPLEX_OPTIMAL, description);
+            snprintf(description, sizeof(description), "sample '%s' Z", sample->title);
+            check_value(result->objective_value, sample->expected_objective, description);
+        }
+        simplex_result_free(result);
+    }
 }
 
 // Chvatal: 3 variables, una fila con coeficiente 0 en la columna que entra y optimo Z = 13
@@ -1332,6 +1405,7 @@ int main(void) {
     test_degenerate_flags();
     test_dantzig_nightmare_history();
     test_iteration_limit();
+    test_sample_problems();
     test_random_problems();
 
     printf("%d checks run, %d failed\n", checks_run, checks_failed);

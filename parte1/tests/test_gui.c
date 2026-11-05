@@ -5,6 +5,8 @@
 
 #include "main_window.h"
 #include "problem.h"
+#include "sample_problems.h"
+#include "simplex.h"
 
 // =============================================
 // Constants
@@ -27,6 +29,8 @@ static GtkWidget *variables_spin = NULL;
 static GtkWidget *constraints_spin = NULL;
 static GtkWidget *intermediate_check = NULL;
 static GtkWidget *problem_name_entry = NULL;
+static GtkWidget *sample_combo = NULL;
+static GtkWidget *status_label = NULL;
 static int dialogs_closed = 0;
 static int checks_run = 0;
 static int checks_failed = 0;
@@ -194,6 +198,72 @@ static void test_problem_names(void) {
     }
 }
 
+// Devuelve 1 si el campo de la cuadricula tiene exactamente ese texto (NULL equivale a vacio)
+static int entry_has_text(int column, int row, const char *expected) {
+    const char *text = gtk_entry_get_text(GTK_ENTRY(grid_entry(column, row)));
+    if (expected == NULL) {
+        return strcmp(text, "") == 0;
+    }
+    return strcmp(text, expected) == 0;
+}
+
+// Cada ejemplo del menu llena el formulario, borra lo que habia y se resuelve sin dialogos
+static void test_sample_menu(void) {
+    char description[160];
+
+    // Datos en una celda que el primer ejemplo (2 x 2) deja oculta: al cargarlo debe quedar vacia
+    set_sizes(15, 15);
+    fill_valid_data(15, 15);
+
+    for (int index = 0; index < sample_problem_count(); index++) {
+        const SampleProblem *sample = sample_problem_get(index);
+        gtk_combo_box_set_active(GTK_COMBO_BOX(sample_combo), index + 1);
+
+        // Cantidades, nombre y celdas cargadas
+        snprintf(description, sizeof(description), "sample '%s' sets the sizes", sample->title);
+        check(gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(variables_spin)) == sample->variable_count &&
+                  gtk_spin_button_get_value_as_int(GTK_SPIN_BUTTON(constraints_spin)) == sample->constraint_count,
+              description);
+        snprintf(description, sizeof(description), "sample '%s' sets the name", sample->title);
+        check(strcmp(gtk_entry_get_text(GTK_ENTRY(problem_name_entry)), sample->name) == 0, description);
+        int cells_match = 1;
+        for (int variable = 0; variable < MAX_VARIABLES; variable++) {
+            if (!entry_has_text(FIRST_VARIABLE_COLUMN + variable, OBJECTIVE_ROW, sample->objective[variable])) {
+                cells_match = 0;
+            }
+        }
+        for (int constraint = 0; constraint < MAX_CONSTRAINTS; constraint++) {
+            for (int variable = 0; variable < MAX_VARIABLES; variable++) {
+                if (!entry_has_text(FIRST_VARIABLE_COLUMN + variable, FIRST_CONSTRAINT_ROW + constraint,
+                                    sample->coefficients[constraint][variable])) {
+                    cells_match = 0;
+                }
+            }
+            if (!entry_has_text(RIGHT_HAND_SIDE_COLUMN, FIRST_CONSTRAINT_ROW + constraint,
+                                sample->right_hand_sides[constraint])) {
+                cells_match = 0;
+            }
+        }
+        snprintf(description, sizeof(description), "sample '%s' fills every cell and clears the rest", sample->title);
+        check(cells_match, description);
+
+        // Resolver y comparar el estado con el resultado anotado
+        gtk_toggle_button_set_active(GTK_TOGGLE_BUTTON(intermediate_check), index % 2);
+        snprintf(description, sizeof(description), "sample '%s' solves without dialogs", sample->title);
+        check(click_solve() == 0, description);
+        const char *expected_status = simplex_status_message(SIMPLEX_OPTIMAL);
+        if (sample->expected_objective == NULL) {
+            expected_status = simplex_status_message(SIMPLEX_UNBOUNDED);
+        }
+        snprintf(description, sizeof(description), "sample '%s' has the expected status", sample->title);
+        check(g_str_has_prefix(gtk_label_get_text(GTK_LABEL(status_label)), expected_status), description);
+    }
+
+    // Volver a la indicacion no cambia nada
+    gtk_combo_box_set_active(GTK_COMBO_BOX(sample_combo), 0);
+    check(click_solve() == 0, "placeholder keeps the last sample loaded");
+}
+
 // =============================================
 // Main
 // ---------------------------------------------
@@ -225,6 +295,8 @@ int main(int argc, char **argv) {
     constraints_spin = GTK_WIDGET(gtk_builder_get_object(builder, "constraints_spin"));
     intermediate_check = GTK_WIDGET(gtk_builder_get_object(builder, "intermediate_check"));
     problem_name_entry = GTK_WIDGET(gtk_builder_get_object(builder, "problem_name_entry"));
+    sample_combo = GTK_WIDGET(gtk_builder_get_object(builder, "sample_combo"));
+    status_label = GTK_WIDGET(gtk_builder_get_object(builder, "status_label"));
     gtk_widget_show_all(window);
 
     // El cerrador de dialogos corre dentro del bucle anidado de gtk_dialog_run
@@ -235,6 +307,7 @@ int main(int argc, char **argv) {
     test_size_changes();
     test_repeated_clicks();
     test_problem_names();
+    test_sample_menu();
 
     printf("%d checks run, %d failed, %d dialogs closed\n", checks_run, checks_failed, dialogs_closed);
     if (checks_failed > 0) {

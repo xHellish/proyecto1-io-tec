@@ -24,6 +24,13 @@ void latex_append_decimal(GString *output, double value) {
     g_string_append(output, buffer);
 }
 
+// Numero con formato propio y punto decimal
+void latex_append_formatted(GString *output, const char *format, double value) {
+    char buffer[G_ASCII_DTOSTR_BUF_SIZE];
+    g_ascii_formatd(buffer, sizeof(buffer), format, value);
+    g_string_append(output, buffer);
+}
+
 // Una restriccion como "3 x1 + 2 x2 <= 12"
 void latex_append_constraint(GString *output, const Problem *problem, int constraint) {
     int is_first = 1;

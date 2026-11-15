@@ -1,4 +1,5 @@
 #include <glib.h>
+#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -132,6 +133,101 @@ static void test_reference_problems(void) {
     expect_compiles(&problem, "ref_class_minimization");
     build_breadco_unbounded(&problem);
     expect_compiles(&problem, "ref_breadco");
+}
+
+// Devuelve 1 si el .tex generado con ese nombre contiene el texto
+static int tex_contains(const char *file_name, const char *text) {
+    gchar *path = g_strdup_printf("%s/%s.tex", output_dir, file_name);
+    gchar *contents = NULL;
+    int has_text = 0;
+
+    if (g_file_get_contents(path, &contents, NULL, NULL)) {
+        has_text = (strstr(contents, text) != NULL);
+        g_free(contents);
+    }
+    g_free(path);
+    return has_text;
+}
+
+// Llena un problema de 3 variables con una restriccion por fila: coeficientes, relacion y lado derecho
+static void build_three_variable_problem(Problem *problem, ObjectiveType objective_type, int constraint_count,
+                                         const int coefficients[][3], const ConstraintType types[],
+                                         const int right_hand_sides[]) {
+    problem_init(problem);
+    problem_set_name(problem, "Three variables");
+    problem_set_sizes(problem, 3, constraint_count);
+    problem->objective_type = objective_type;
+    for (int variable = 0; variable < 3; variable++) {
+        set_int(&problem->objective[variable], 1 + variable);
+    }
+    for (int constraint = 0; constraint < constraint_count; constraint++) {
+        for (int variable = 0; variable < 3; variable++) {
+            set_int(&problem->coefficients[constraint][variable], coefficients[constraint][variable]);
+        }
+        problem->constraint_types[constraint] = types[constraint];
+        set_int(&problem->right_hand_sides[constraint], right_hand_sides[constraint]);
+    }
+}
+
+// Graficos de los extras: el 2D solo con 2 variables y el cuerpo 3D solo con 3
+static void test_plot_pages(void) {
+    Problem problem;
+
+    build_wyndor_glass(&problem);
+    expect_compiles(&problem, "plot_two_variables");
+    check(tex_contains("plot_two_variables_short", "Gráfico de la región factible"), "plot_2d_present",
+          "2 variables must have the region plot");
+    check(!tex_contains("plot_two_variables_short", "Cuerpo Símplex tridimensional"), "plot_3d_absent_in_2d",
+          "2 variables must not have the 3D body");
+
+    build_dakota(&problem);
+    expect_compiles(&problem, "plot_three_variables");
+    check(tex_contains("plot_three_variables_short", "Cuerpo Símplex tridimensional"), "plot_3d_present",
+          "3 variables must have the 3D body");
+    check(!tex_contains("plot_three_variables_short", "Gráfico de la región factible"), "plot_2d_absent_in_3d",
+          "3 variables must not have the 2D plot");
+
+    build_breadco_unbounded(&problem);
+    expect_compiles(&problem, "plot_four_variables");
+    check(!tex_contains("plot_four_variables_short", "Cuerpo Símplex tridimensional") &&
+              !tex_contains("plot_four_variables_short", "Gráfico de la región factible"),
+          "plots_absent_in_4d", "4 variables must have no plots");
+}
+
+// Cuerpos de 3 variables de todos los tipos: cubo, caso con >= y =, plano, no acotado, no factible y soluciones multiples
+static void test_three_variable_bodies(void) {
+    Problem problem;
+    const int cube[][3] = {{1, 0, 0}, {0, 1, 0}, {0, 0, 1}};
+    const ConstraintType cube_types[] = {CONSTRAINT_LESS_EQUAL, CONSTRAINT_LESS_EQUAL, CONSTRAINT_LESS_EQUAL};
+    const int cube_limits[] = {4, 5, 6};
+    const int mixed[][3] = {{1, 1, 1}, {1, 2, 0}, {0, 1, 3}};
+    const ConstraintType mixed_types[] = {CONSTRAINT_LESS_EQUAL, CONSTRAINT_GREATER_EQUAL, CONSTRAINT_EQUAL};
+    const int mixed_limits[] = {12, 2, 6};
+    const int open_rows[][3] = {{1, -1, 0}, {0, 1, -1}, {0, 0, 1}};
+    const ConstraintType open_types[] = {CONSTRAINT_GREATER_EQUAL, CONSTRAINT_GREATER_EQUAL, CONSTRAINT_GREATER_EQUAL};
+    const int open_limits[] = {1, 1, 2};
+    const int empty_rows[][3] = {{1, 1, 1}, {1, 1, 1}};
+    const ConstraintType empty_types[] = {CONSTRAINT_LESS_EQUAL, CONSTRAINT_GREATER_EQUAL};
+    const int empty_limits[] = {2, 9};
+    const int flat_rows[][3] = {{1, 1, 1}, {1, 0, 0}};
+    const ConstraintType flat_types[] = {CONSTRAINT_EQUAL, CONSTRAINT_LESS_EQUAL};
+    const int flat_limits[] = {6, 4};
+    const int tie_rows[][3] = {{1, 2, 3}, {1, 0, 0}, {0, 1, 0}};
+    const ConstraintType tie_types[] = {CONSTRAINT_LESS_EQUAL, CONSTRAINT_LESS_EQUAL, CONSTRAINT_LESS_EQUAL};
+    const int tie_limits[] = {12, 4, 3};
+
+    build_three_variable_problem(&problem, OBJECTIVE_MAXIMIZE, 3, cube, cube_types, cube_limits);
+    expect_compiles(&problem, "body_box");
+    build_three_variable_problem(&problem, OBJECTIVE_MINIMIZE, 3, mixed, mixed_types, mixed_limits);
+    expect_compiles(&problem, "body_mixed");
+    build_three_variable_problem(&problem, OBJECTIVE_MAXIMIZE, 3, open_rows, open_types, open_limits);
+    expect_compiles(&problem, "body_unbounded");
+    build_three_variable_problem(&problem, OBJECTIVE_MAXIMIZE, 2, empty_rows, empty_types, empty_limits);
+    expect_compiles(&problem, "body_infeasible");
+    build_three_variable_problem(&problem, OBJECTIVE_MAXIMIZE, 2, flat_rows, flat_types, flat_limits);
+    expect_compiles(&problem, "body_plane");
+    build_three_variable_problem(&problem, OBJECTIVE_MAXIMIZE, 3, tie_rows, tie_types, tie_limits);
+    expect_compiles(&problem, "body_multiple");
 }
 
 // Cada ejemplo del menu de la ventana (incluidos los de la Gran M, el no factible y el no acotado) compila
@@ -329,6 +425,8 @@ static void test_environment_failures(void) {
 // Main
 // ---------------------------------------------
 int main(int argc, char **argv) {
+    // Igual que la ventana, usa el idioma del sistema: un decimal con coma rompería el LaTeX
+    setlocale(LC_ALL, "");
     if (argc != 2) {
         fprintf(stderr, "Usage: %s <output directory>\n", argv[0]);
         return 2;
@@ -338,6 +436,8 @@ int main(int argc, char **argv) {
     test_reference_problems();
     test_unbounded();
     test_sample_problems();
+    test_plot_pages();
+    test_three_variable_bodies();
     test_sizes();
     test_big_m_sizes();
     test_problem_names();

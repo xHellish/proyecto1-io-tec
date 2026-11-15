@@ -1098,9 +1098,12 @@ int latex_report_write(const char *path, const Problem *problem, const SimplexRe
     if (result->status == SIMPLEX_OPTIMAL && result->multiple_kind != MULTIPLE_NONE) {
         append_multiple_solutions(output, problem, result);
     }
-    // Extra: con 2 variables, gráfico de las restricciones y la región factible
+    // Extras: con 2 variables el gráfico de la región factible y con 3 el cuerpo Símplex
     if (problem->variable_count == 2) {
         plots_append_region_2d(output, problem, result);
+    }
+    if (problem->variable_count == 3) {
+        plots_append_body_3d(output, problem, result);
     }
     if (result->is_degenerate) {
         append_degenerate(output, result);

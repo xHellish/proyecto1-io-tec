@@ -438,7 +438,7 @@ const char *main_window_setup(GtkBuilder *builder, GtkWidget *window, const char
     on_sizes_changed(NULL, NULL);
 
     // Menu de ejemplos: una indicacion y luego un problema del cuaderno por opcion
-    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.sample_combo), "Elegir un problema para cargarlo...");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.sample_combo), "Cargar un ejemplo...");
     for (int index = 0; index < sample_problem_count(); index++) {
         gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(widgets.sample_combo), sample_problem_get(index)->title);
     }

@@ -1,12 +1,13 @@
 #include "latex_report.h"
 #include <glib.h>
 #include <stdio.h>
+#include <string.h>
 
 // =============================================
 // Constants
 // ---------------------------------------------
-#define PROJECT_TITLE "Proyecto 1: Otro SIMPLEX más"
-#define PROJECT_PART "Parte 1"
+#define PROJECT_TITLE "Proyecto 2: Otro SIMPLEX más"
+#define PROJECT_PART "Parte 2"
 #define INSTITUTION_NAME "Instituto Tecnológico de Costa Rica"
 #define PROGRAM_NAME "Ingeniería en Computación"
 #define COURSE_NAME "Investigación de Operaciones"
@@ -28,7 +29,7 @@ static const char *STUDENT_NAMES[] = {
 
 #define WIDE_TABLE_COLUMNS 14
 #define TALL_TABLE_ROWS 8
-#define TABLE_HEIGHT_TALL "0.6\\textheight"
+#define TABLE_HEIGHT_TALL "0.5\\textheight"
 #define EXTRA_POINT_COUNT 3
 
 // =============================================
@@ -76,24 +77,81 @@ static void append_escaped(GString *output, const char *text) {
     }
 }
 
+// Escribe el nombre de una columna de la tabla (variable original, holgura, exceso o artificial)
 static void append_column_label(GString *output, const Problem *problem, const Table *table, int column) {
-    char slack_name[NAME_BUFFER_SIZE];
+    char name[NAME_BUFFER_SIZE];
     ColumnType type = table->column_types[column];
+    int owner = table->column_owner[column];
 
     if (type == COLUMN_Z) {
         g_string_append(output, "$Z$");
         return;
     }
     if (type == COLUMN_ORIGINAL) {
-        g_string_append(output, problem->variable_names[column - 1]);
+        g_string_append(output, problem->variable_names[owner]);
         return;
     }
     if (type == COLUMN_SLACK) {
-        problem_slack_name(column - problem->variable_count - 1, slack_name, NAME_BUFFER_SIZE);
-        g_string_append(output, slack_name);
+        problem_slack_name(owner, name, NAME_BUFFER_SIZE);
+        g_string_append(output, name);
+        return;
+    }
+    if (type == COLUMN_SURPLUS) {
+        problem_surplus_name(owner, name, NAME_BUFFER_SIZE);
+        g_string_append(output, name);
+        return;
+    }
+    if (type == COLUMN_ARTIFICIAL) {
+        problem_artificial_name(owner, name, NAME_BUFFER_SIZE);
+        g_string_append(output, name);
         return;
     }
     g_string_append(output, "LD");
+}
+
+// Escribe un valor de la fila objetivo como bM + a (la parte de M primero, como en clase)
+static void append_objective_value(GString *output, const Table *table, int column) {
+    Fraction constant = table->cells[0][column];
+    Fraction m_part = table->m_cells[column];
+
+    // Sin M es un numero normal
+    if (fraction_sign(m_part) == 0) {
+        append_fraction(output, constant);
+        return;
+    }
+
+    // Parte de M: M, -M o fraccion por M
+    if (m_part.numerator == 1 && m_part.denominator == 1) {
+        g_string_append(output, "M");
+    } else if (m_part.numerator == -1 && m_part.denominator == 1) {
+        g_string_append(output, "-M");
+    } else {
+        append_fraction(output, m_part);
+        g_string_append(output, "M");
+    }
+
+    // Constante con su signo; si es 0 no se escribe
+    if (fraction_sign(constant) > 0) {
+        g_string_append(output, " + ");
+        append_fraction(output, constant);
+    } else if (fraction_sign(constant) < 0) {
+        g_string_append(output, " - ");
+        append_fraction(output, fraction_negate(constant));
+    }
+}
+
+// Grupo de una columna para separar con lineas verticales: originales, holguras y excesos, artificiales
+static int column_group(ColumnType type) {
+    if (type == COLUMN_ORIGINAL) {
+        return 0;
+    }
+    if (type == COLUMN_SLACK || type == COLUMN_SURPLUS) {
+        return 1;
+    }
+    if (type == COLUMN_ARTIFICIAL) {
+        return 2;
+    }
+    return 3;
 }
 
 static void append_variable_names(GString *output, const Problem *problem) {
@@ -292,6 +350,41 @@ static void append_simplex_properties(GString *output) {
                     "\\end{itemize}\n");
 }
 
+// Explicacion del algoritmo de la Gran M (dos paginas): para que sirve, como se arma y como se interpreta
+static void append_big_m_method(GString *output) {
+    g_string_append(output,
+                    "\\slide{El método de la Gran M: la idea}\n"
+                    "\\small\n"
+                    "El Símplex necesita una \\textbf{solución básica factible inicial}. Con restricciones "
+                    "$\\leq$ la da la holgura $s_i$ (coeficiente $+1$ y lado derecho $\\geq 0$), pero las "
+                    "restricciones $\\geq$ y $=$ no tienen una variable así. El método de la \\textbf{Gran M} "
+                    "lo resuelve agregando variables artificiales:\n"
+                    "\\begin{itemize}\\setlength{\\itemsep}{2pt}\n"
+                    "\\item[-] Restricción $\\geq$: se resta una variable de \\textbf{exceso} $e_i$ y se suma "
+                    "una \\textbf{artificial} $a_i$.\n"
+                    "\\item[-] Restricción $=$: solo se suma una artificial $a_i$.\n"
+                    "\\item[-] Las artificiales (y las holguras de las $\\leq$) forman la base inicial.\n"
+                    "\\item[-] Las artificiales no son parte del problema: se castigan en la función objetivo "
+                    "con $M$, un número positivo \\textbf{mayor que cualquier otro} del problema. Al maximizar "
+                    "se resta $M\\,a_i$ de $Z$; al minimizar se suma $M\\,a_i$.\n"
+                    "\\end{itemize}\n"
+                    "\\slide{El método de la Gran M: los pasos}\n"
+                    "\\small\n"
+                    "\\begin{enumerate}\\setlength{\\itemsep}{2pt}\n"
+                    "\\item \\textbf{Tabla inicial:} las artificiales llevan $\\pm M$ en la fila $Z$.\n"
+                    "\\item \\textbf{Canonización:} como las artificiales están en la base, su columna debe "
+                    "quedar en 0 en la fila $Z$. Se resta (o suma) $M$ veces la fila de cada artificial, y los "
+                    "valores de la fila $Z$ pasan a ser de la forma $bM + a$.\n"
+                    "\\item \\textbf{Símplex normal:} los valores $bM + a$ se comparan primero por $b$ y "
+                    "después por $a$, porque $M$ es mayor que cualquier número.\n"
+                    "\\item Cuando una artificial \\textbf{sale de la base} no vuelve a entrar: su columna "
+                    "se omite en las tablas siguientes.\n"
+                    "\\item \\textbf{Resultado:} si las artificiales terminan fuera de la base (o en la base "
+                    "con valor 0) se obtuvo la solución del problema original. Si una artificial queda en la base "
+                    "con valor \\textbf{positivo}, el problema es \\textbf{no factible}.\n"
+                    "\\end{enumerate}\n");
+}
+
 static void append_reading_guide(GString *output, const Problem *problem) {
     g_string_append(output, "\\slide{Cómo leer las tablas}\n\\small\n");
 
@@ -310,8 +403,8 @@ static void append_reading_guide(GString *output, const Problem *problem) {
                     "\\\\[2.5mm]\n"
                     "\\callout{tecblue}{Desempates}{Si dos columnas empatan entra la de menor índice. Si dos "
                     "filas empatan en la fracción mínima sale la variable básica de menor índice (primero las "
-                    "variables originales y después las holguras $s_i$). Todos los números son fracciones "
-                    "exactas.}\n");
+                    "variables originales, después las holguras $s_i$ y los excesos $e_i$ y por último las "
+                    "artificiales $a_i$). Todos los números son fracciones exactas.}\n");
 }
 
 static void append_model_row(GString *output, const Problem *problem, const Fraction coefficients[]) {
@@ -385,7 +478,13 @@ static void append_problem(GString *output, const Problem *problem) {
             g_string_append(output, " &");
         }
         append_model_row(output, problem, problem->coefficients[constraint]);
-        g_string_append(output, " & $\\leq$ & $");
+        if (problem->constraint_types[constraint] == CONSTRAINT_GREATER_EQUAL) {
+            g_string_append(output, " & $\\geq$ & $");
+        } else if (problem->constraint_types[constraint] == CONSTRAINT_EQUAL) {
+            g_string_append(output, " & $=$ & $");
+        } else {
+            g_string_append(output, " & $\\leq$ & $");
+        }
         append_fraction(output, problem->right_hand_sides[constraint]);
         g_string_append(output, "$ \\\\\n");
     }
@@ -417,15 +516,15 @@ static void append_table(GString *output, const Problem *problem, const Step *st
     if (table->row_count > TALL_TABLE_ROWS) {
         g_string_append(output, "\\renewcommand{\\arraystretch}{1.1}\n");
     }
+    // Base, Z y una columna por variable; una linea vertical separa cada grupo de columnas
     g_string_append(output, "\\begin{tabular}{c|c|");
-    for (int variable = 0; variable < problem->variable_count; variable++) {
+    for (int column = 1; column < table->column_count; column++) {
         g_string_append(output, "c");
+        if (column + 1 < table->column_count &&
+            column_group(table->column_types[column]) != column_group(table->column_types[column + 1])) {
+            g_string_append(output, "|");
+        }
     }
-    g_string_append(output, "|");
-    for (int slack = 0; slack < problem->constraint_count; slack++) {
-        g_string_append(output, "c");
-    }
-    g_string_append(output, "|c");
     if (show_ratios) {
         g_string_append(output, "|c");
     }
@@ -478,6 +577,10 @@ static void append_table(GString *output, const Problem *problem, const Step *st
                 g_string_append(output, "\\pivotcell{$");
                 append_fraction(output, table->cells[row][column]);
                 g_string_append(output, "$}");
+            } else if (row == 0) {
+                g_string_append(output, "$");
+                append_objective_value(output, table, column);
+                g_string_append(output, "$");
             } else {
                 g_string_append(output, "$");
                 append_fraction(output, table->cells[row][column]);
@@ -563,6 +666,10 @@ static void append_decisions(GString *output, const Problem *problem, const Step
                                            "menor índice.",
                                    step->tied_row_count);
         }
+        if (table->column_types[table->basis[step->leaving_constraint]] == COLUMN_ARTIFICIAL) {
+            g_string_append(output, " {\\color{okgreen}Sale una artificial:} su columna se omite en las tablas "
+                                    "siguientes.");
+        }
         if (fraction_sign(step->ratios[step->leaving_constraint]) == 0) {
             g_string_append(output, " {\\color{warnorange}Pivoteo degenerado:} la fracción mínima es 0 y $Z$ no "
                                     "mejora.");
@@ -590,7 +697,12 @@ static void append_step(GString *output, const Problem *problem, const SimplexRe
         append_zero_basics(output, problem, &step->table);
     }
 
-    if (step->entering_column == -1) {
+    int is_infeasible_end = (is_last_step && result->status == SIMPLEX_INFEASIBLE);
+    if (step->entering_column == -1 && is_infeasible_end) {
+        g_string_append(output, "\\chip{tecred!15}{\\color{tecred}\\bfseries Óptima para la Gran M, pero no "
+                                "factible}\\par\n{\\footnotesize\\color{textgray}Ningún valor de la fila $Z$ "
+                                "mejora, pero una variable artificial sigue en la base con valor positivo.\\par}\n");
+    } else if (step->entering_column == -1) {
         g_string_append(output, "\\chip{okgreen!20}{\\color{okgreen}\\bfseries Tabla óptima}\\par\n"
                                 "{\\footnotesize\\color{textgray}");
         if (step->table.objective_type == OBJECTIVE_MINIMIZE) {
@@ -601,15 +713,35 @@ static void append_step(GString *output, const Problem *problem, const SimplexRe
         g_string_append(output, "\\par}\n");
     } else if (step->table.objective_type == OBJECTIVE_MINIMIZE) {
         append_decisions(output, problem, step, "valor más positivo de la fila $Z$",
-                         is_last_step && result->status == SIMPLEX_UNBOUNDED);
+                         is_last_step && (result->status == SIMPLEX_UNBOUNDED || is_infeasible_end));
     } else {
         append_decisions(output, problem, step, "valor más negativo de la fila $Z$",
-                         is_last_step && result->status == SIMPLEX_UNBOUNDED);
+                         is_last_step && (result->status == SIMPLEX_UNBOUNDED || is_infeasible_end));
     }
 
     if (note != NULL) {
         g_string_append_printf(output, "{\\footnotesize\\color{textgray}\\emph{%s}\\par}\n", note);
     }
+}
+
+// Tabla inicial de la Gran M (con M en las artificiales), antes de canonizar, con lo que se agrego
+static void append_initial_table(GString *output, const Problem *problem, const SimplexResult *result) {
+    Step initial_step;
+    memset(&initial_step, 0, sizeof(initial_step));
+    initial_step.table = result->initial_table;
+    initial_step.entering_column = -1;
+    initial_step.leaving_constraint = -1;
+
+    g_string_append(output, "\\slide{Tabla inicial}\n");
+    append_table(output, problem, &initial_step, TABLE_HEIGHT_WITH_DECISIONS);
+    g_string_append(output, "\\vspace{1mm}{\\footnotesize\\color{textgray}Cada restricción $\\geq$ lleva un exceso "
+                            "$e_i$ y una artificial $a_i$, y cada $=$ una artificial $a_i$. ");
+    if (problem->objective_type == OBJECTIVE_MINIMIZE) {
+        g_string_append(output, "Al minimizar, cada artificial suma $M$ a $Z$ y aparece con $-M$ en la fila $Z$.");
+    } else {
+        g_string_append(output, "Al maximizar, cada artificial resta $M$ de $Z$ y aparece con $+M$ en la fila $Z$.");
+    }
+    g_string_append(output, " $M$ es mayor que cualquier número del problema.\\par}\n");
 }
 
 static void append_history(GString *output, const Problem *problem, const SimplexResult *result,
@@ -619,6 +751,11 @@ static void append_history(GString *output, const Problem *problem, const Simple
     int last_index = result->step_count - 1;
     int hidden_count = 0;
 
+    // Con artificiales se muestra primero la tabla inicial y luego la canonizada (la tabla 0)
+    if (result->has_artificials) {
+        append_initial_table(output, problem, result);
+    }
+
     for (int step_index = 0; step_index <= last_index; step_index++) {
         int is_intermediate = (step_index > 0 && step_index < last_index);
 
@@ -627,7 +764,11 @@ static void append_history(GString *output, const Problem *problem, const Simple
             continue;
         }
 
-        if (step_index == 0 && step_index == last_index) {
+        if (step_index == 0 && result->has_artificials && step_index == last_index) {
+            snprintf(title, sizeof(title), "Canonización y tabla final");
+        } else if (step_index == 0 && result->has_artificials) {
+            snprintf(title, sizeof(title), "Canonización de las artificiales");
+        } else if (step_index == 0 && step_index == last_index) {
             snprintf(title, sizeof(title), "Tabla inicial y final");
         } else if (step_index == 0) {
             snprintf(title, sizeof(title), "Tabla inicial");
@@ -639,7 +780,12 @@ static void append_history(GString *output, const Problem *problem, const Simple
             snprintf(title, sizeof(title), "Tabla intermedia %d", step_index);
         }
 
-        if (step_index == last_index && hidden_count > 0) {
+        if (step_index == 0 && result->has_artificials) {
+            snprintf(note, sizeof(note),
+                     "Se eliminó la $M$ de las columnas artificiales en la fila $Z$ usando la fila de cada artificial: "
+                     "ahora son variables básicas válidas y esta es la primera tabla del Símplex.");
+            append_step(output, problem, result, step_index, title, note);
+        } else if (step_index == last_index && hidden_count > 0) {
             if (hidden_count == 1) {
                 snprintf(note, sizeof(note), "Se omitió 1 tabla intermedia; se puede pedir desde la ventana.");
             } else {
@@ -660,9 +806,21 @@ static void append_objective_badge(GString *output, Fraction objective_value) {
     g_string_append(output, "$};\\end{center}\n");
 }
 
+// Variables de decision y holguras o excesos de una solucion; las igualdades no tienen holgura ni exceso
 static void append_values(GString *output, const Problem *problem, const Fraction variable_values[],
                           const Fraction slack_values[], const char *max_height) {
-    char slack_name[NAME_BUFFER_SIZE];
+    char auxiliary_name[NAME_BUFFER_SIZE];
+    int slack_count = 0;
+    int surplus_count = 0;
+
+    // Que clase de variables auxiliares hay en este problema
+    for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
+        if (problem->constraint_types[constraint] == CONSTRAINT_LESS_EQUAL) {
+            slack_count++;
+        } else if (problem->constraint_types[constraint] == CONSTRAINT_GREATER_EQUAL) {
+            surplus_count++;
+        }
+    }
 
     g_string_append(output, "\\begin{lrbox}{\\fitbox}\\large\n\\begin{tabular}{r@{\\;}c@{\\;}l}\n"
                             "\\multicolumn{3}{l}{\\color{tecblue}\\bfseries Variables de decisión} \\\\\n");
@@ -671,15 +829,68 @@ static void append_values(GString *output, const Problem *problem, const Fractio
         append_fraction(output, variable_values[variable]);
         g_string_append(output, "$ \\\\\n");
     }
-    g_string_append(output, "\\end{tabular}\\hspace{14mm}\n\\begin{tabular}{r@{\\;}c@{\\;}l}\n"
-                            "\\multicolumn{3}{l}{\\color{tecblue}\\bfseries Holguras} \\\\\n");
-    for (int slack = 0; slack < problem->constraint_count; slack++) {
-        problem_slack_name(slack, slack_name, NAME_BUFFER_SIZE);
-        g_string_append_printf(output, "%s & $=$ & $", slack_name);
-        append_fraction(output, slack_values[slack]);
-        g_string_append(output, "$ \\\\\n");
+    g_string_append(output, "\\end{tabular}");
+
+    // Segunda tabla solo si alguna restriccion tiene holgura o exceso
+    if (slack_count + surplus_count > 0) {
+        if (slack_count > 0 && surplus_count > 0) {
+            g_string_append(output, "\\hspace{14mm}\n\\begin{tabular}{r@{\\;}c@{\\;}l}\n"
+                                    "\\multicolumn{3}{l}{\\color{tecblue}\\bfseries Holguras y excesos} \\\\\n");
+        } else if (slack_count > 0) {
+            g_string_append(output, "\\hspace{14mm}\n\\begin{tabular}{r@{\\;}c@{\\;}l}\n"
+                                    "\\multicolumn{3}{l}{\\color{tecblue}\\bfseries Holguras} \\\\\n");
+        } else {
+            g_string_append(output, "\\hspace{14mm}\n\\begin{tabular}{r@{\\;}c@{\\;}l}\n"
+                                    "\\multicolumn{3}{l}{\\color{tecblue}\\bfseries Excesos} \\\\\n");
+        }
+        for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
+            if (problem->constraint_types[constraint] == CONSTRAINT_EQUAL) {
+                continue;
+            }
+            if (problem->constraint_types[constraint] == CONSTRAINT_GREATER_EQUAL) {
+                problem_surplus_name(constraint, auxiliary_name, NAME_BUFFER_SIZE);
+            } else {
+                problem_slack_name(constraint, auxiliary_name, NAME_BUFFER_SIZE);
+            }
+            g_string_append_printf(output, "%s & $=$ & $", auxiliary_name);
+            append_fraction(output, slack_values[constraint]);
+            g_string_append(output, "$ \\\\\n");
+        }
+        g_string_append(output, "\\end{tabular}");
     }
-    g_string_append_printf(output, "\\end{tabular}\n\\end{lrbox}\n\\showfitted{%s}\n", max_height);
+    g_string_append_printf(output, "\n\\end{lrbox}\n\\showfitted{%s}\n", max_height);
+}
+
+// Explicacion del problema no factible: que artificiales quedaron positivas y que significa
+static void append_infeasible(GString *output, const Problem *problem, const Step *last_step) {
+    const Table *table = &last_step->table;
+    int right_hand_side_column = table->column_count - 1;
+    int is_first = 1;
+
+    g_string_append(output, "\\callout{tecred}{Problema no factible}{El Símplex con la Gran M terminó, pero en la "
+                            "última tabla ");
+    for (int constraint = 0; constraint < table->row_count - 1; constraint++) {
+        int column = table->basis[constraint];
+        if (table->column_types[column] != COLUMN_ARTIFICIAL ||
+            fraction_sign(table->cells[constraint + 1][right_hand_side_column]) <= 0) {
+            continue;
+        }
+        if (!is_first) {
+            g_string_append(output, ", ");
+        }
+        append_column_label(output, problem, table, column);
+        g_string_append(output, " $= ");
+        append_fraction(output, table->cells[constraint + 1][right_hand_side_column]);
+        g_string_append(output, "$");
+        is_first = 0;
+    }
+    g_string_append(output, " sigue en la base con un valor \\textbf{positivo}.}\n"
+                            "\\vspace{1.5mm}{\\small Una variable artificial positiva significa que alguna restricción "
+                            "$\\geq$ o $=$ no se cumple sin ella. Como $M$ castiga cualquier valor positivo de las "
+                            "artificiales más que cualquier otro cambio de $Z$, el algoritmo hizo todo lo posible por "
+                            "sacarlas de la base y no lo logró: \\textbf{no existe ningún punto que cumpla todas las "
+                            "restricciones a la vez}.\\par\\vspace{1mm}\n"
+                            "La región factible está vacía, así que el problema no tiene solución óptima.\\par}\n");
 }
 
 static void append_solution(GString *output, const Problem *problem, const SimplexResult *result) {
@@ -702,6 +913,10 @@ static void append_solution(GString *output, const Problem *problem, const Simpl
         g_string_append(output, ", pero su columna no tiene coeficientes positivos. Ninguna restricción limita su "
                                 "crecimiento: esa variable puede aumentar sin fin y $Z$ mejora sin límite, así "
                                 "que el problema no tiene una solución óptima finita.}\n");
+        return;
+    }
+    if (result->status == SIMPLEX_INFEASIBLE) {
+        append_infeasible(output, problem, last_step);
         return;
     }
     if (result->status == SIMPLEX_ITERATION_LIMIT) {
@@ -876,6 +1091,7 @@ int latex_report_write(const char *path, const Problem *problem, const SimplexRe
     append_cover(output, problem);
     append_simplex_history(output);
     append_simplex_properties(output);
+    append_big_m_method(output);
     append_reading_guide(output, problem);
     append_problem(output, problem);
     append_history(output, problem, result, show_intermediate_tables);

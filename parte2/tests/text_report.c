@@ -8,6 +8,8 @@
 // ---------------------------------------------
 // Ancho minimo de cada columna de la tabla
 #define MINIMUM_CELL_WIDTH 5
+// Una celda con M puede llevar dos fracciones: bM+a
+#define CELL_TEXT_SIZE (2 * FRACTION_STRING_SIZE + 4)
 
 // Soluciones adicionales que se reportan cuando hay soluciones multiples
 #define EXTRA_POINT_COUNT 3
@@ -16,20 +18,32 @@
 // Helpers
 // ---------------------------------------------
 
-// Escribe el nombre corto de una columna: Z, x1, s1 o LD (lado derecho)
+// Escribe el nombre corto de una columna: Z, x1, s1, e1, a1 o LD (lado derecho)
 static void write_column_label(const Table *table, int variable_count, int column, char *buffer, size_t buffer_size) {
     ColumnType type = table->column_types[column];
+    int owner = table->column_owner[column];
+
+    // Los nombres salen del dueno de la columna, asi que la cantidad de variables ya no hace falta
+    (void)variable_count;
 
     if (type == COLUMN_Z) {
         snprintf(buffer, buffer_size, "Z");
         return;
     }
     if (type == COLUMN_ORIGINAL) {
-        snprintf(buffer, buffer_size, "x%d", column);
+        snprintf(buffer, buffer_size, "x%d", owner + 1);
         return;
     }
     if (type == COLUMN_SLACK) {
-        snprintf(buffer, buffer_size, "s%d", column - variable_count);
+        snprintf(buffer, buffer_size, "s%d", owner + 1);
+        return;
+    }
+    if (type == COLUMN_SURPLUS) {
+        snprintf(buffer, buffer_size, "e%d", owner + 1);
+        return;
+    }
+    if (type == COLUMN_ARTIFICIAL) {
+        snprintf(buffer, buffer_size, "a%d", owner + 1);
         return;
     }
     snprintf(buffer, buffer_size, "LD");
@@ -97,12 +111,18 @@ static void append_problem(GString *output, const Problem *problem) {
     append_linear_expression(output, problem->objective, problem->variable_count);
     g_string_append(output, "\nSujeto a:\n");
 
-    // Restricciones (en esta version todas son <=)
+    // Restricciones con su relacion
     for (int constraint = 0; constraint < problem->constraint_count; constraint++) {
         g_string_append(output, "  ");
         append_linear_expression(output, problem->coefficients[constraint], problem->variable_count);
         fraction_to_string(problem->right_hand_sides[constraint], text, FRACTION_STRING_SIZE);
-        g_string_append_printf(output, " <= %s\n", text);
+        if (problem->constraint_types[constraint] == CONSTRAINT_GREATER_EQUAL) {
+            g_string_append_printf(output, " >= %s\n", text);
+        } else if (problem->constraint_types[constraint] == CONSTRAINT_EQUAL) {
+            g_string_append_printf(output, " = %s\n", text);
+        } else {
+            g_string_append_printf(output, " <= %s\n", text);
+        }
     }
     g_string_append(output, "  Todas las variables >= 0\n\n");
 }
@@ -110,7 +130,7 @@ static void append_problem(GString *output, const Problem *problem) {
 // Agrega la tabla alineada: encabezado con las columnas y, en cada fila, su variable basica
 static void append_table(GString *output, const Table *table, int variable_count) {
     char labels[MAX_TABLE_COLUMNS][NAME_BUFFER_SIZE];
-    char cells[MAX_TABLE_ROWS][MAX_TABLE_COLUMNS][FRACTION_STRING_SIZE];
+    char cells[MAX_TABLE_ROWS][MAX_TABLE_COLUMNS][CELL_TEXT_SIZE];
     char row_label[NAME_BUFFER_SIZE];
     int width = MINIMUM_CELL_WIDTH;
 
@@ -124,6 +144,20 @@ static void append_table(GString *output, const Table *table, int variable_count
     for (int row = 0; row < table->row_count; row++) {
         for (int column = 0; column < table->column_count; column++) {
             fraction_to_string(table->cells[row][column], cells[row][column], FRACTION_STRING_SIZE);
+            // En la fila objetivo un valor con M se escribe como bM+a
+            if (row == 0 && fraction_sign(table->m_cells[column]) != 0) {
+                char m_text[FRACTION_STRING_SIZE];
+                char constant_text[FRACTION_STRING_SIZE];
+                fraction_to_string(table->m_cells[column], m_text, FRACTION_STRING_SIZE);
+                strcpy(constant_text, cells[row][column]);
+                if (fraction_sign(table->cells[row][column]) == 0) {
+                    snprintf(cells[row][column], CELL_TEXT_SIZE, "%sM", m_text);
+                } else if (fraction_sign(table->cells[row][column]) > 0) {
+                    snprintf(cells[row][column], CELL_TEXT_SIZE, "%sM+%s", m_text, constant_text);
+                } else {
+                    snprintf(cells[row][column], CELL_TEXT_SIZE, "%sM%s", m_text, constant_text);
+                }
+            }
             if ((int)strlen(cells[row][column]) > width) {
                 width = (int)strlen(cells[row][column]);
             }

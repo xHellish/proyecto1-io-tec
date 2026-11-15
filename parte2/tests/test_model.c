@@ -186,6 +186,10 @@ static void test_problem_defaults(void) {
     check(strcmp(slack_name, "$s_1$") == 0, "first slack name");
     problem_slack_name(11, slack_name, NAME_BUFFER_SIZE);
     check(strcmp(slack_name, "$s_{12}$") == 0, "twelfth slack name uses braces");
+    problem_surplus_name(1, slack_name, NAME_BUFFER_SIZE);
+    check(strcmp(slack_name, "$e_2$") == 0, "second surplus name");
+    problem_artificial_name(11, slack_name, NAME_BUFFER_SIZE);
+    check(strcmp(slack_name, "$a_{12}$") == 0, "twelfth artificial name uses braces");
 }
 
 // Cambio de cantidades y de nombres
@@ -260,6 +264,14 @@ static void test_problem_validation(void) {
     check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_ERROR_RESERVED_NAME_CONFLICT,
           "slack name conflict is rejected");
     check(strstr(message, "variable 2") != NULL, "message names the conflicting variable");
+
+    // Tambien estan reservados los nombres de exceso y artificial
+    problem_set_variable_name(&problem, 1, "$e_1$");
+    check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_ERROR_RESERVED_NAME_CONFLICT,
+          "surplus name conflict is rejected");
+    problem_set_variable_name(&problem, 1, "$a_2$");
+    check(problem_validate(&problem, message, sizeof(message)) == PROBLEM_ERROR_RESERVED_NAME_CONFLICT,
+          "artificial name conflict is rejected");
 
     // Una holgura que no existe en este tamano no choca
     problem_set_variable_name(&problem, 1, "$s_3$");

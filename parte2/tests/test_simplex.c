@@ -447,48 +447,12 @@ static void test_breadco_unbounded(void) {
     simplex_result_free(result);
 }
 
-// Lee una celda de ejemplo como lo hace la ventana: NULL o vacia vale 0
-static int parse_sample_cell(const char *text, Fraction *value) {
-    if (text == NULL) {
-        *value = fraction_from_int(0);
-        return 1;
-    }
-    return fraction_parse(text, value) == FRACTION_OK;
-}
-
-// Arma el problema con los textos de un ejemplo del menu; devuelve 0 si alguna celda no se puede leer
-static int build_problem_from_sample(const SampleProblem *sample, Problem *problem) {
-    int is_valid = 1;
-
-    problem_init(problem);
-    problem_set_sizes(problem, sample->variable_count, sample->constraint_count);
-    problem_set_name(problem, sample->name);
-    problem->objective_type = sample->objective_type;
-    for (int variable = 0; variable < sample->variable_count; variable++) {
-        if (!parse_sample_cell(sample->objective[variable], &problem->objective[variable])) {
-            is_valid = 0;
-        }
-    }
-    for (int constraint = 0; constraint < sample->constraint_count; constraint++) {
-        for (int variable = 0; variable < sample->variable_count; variable++) {
-            if (!parse_sample_cell(sample->coefficients[constraint][variable],
-                                   &problem->coefficients[constraint][variable])) {
-                is_valid = 0;
-            }
-        }
-        if (!parse_sample_cell(sample->right_hand_sides[constraint], &problem->right_hand_sides[constraint])) {
-            is_valid = 0;
-        }
-    }
-    return is_valid;
-}
-
 // Cada ejemplo del menu de la ventana se lee, pasa la validacion y da el resultado anotado
 static void test_sample_problems(void) {
     char description[160];
     char message[MESSAGE_BUFFER_SIZE];
 
-    check(sample_problem_count() == 11, "there are 11 sample problems");
+    check(sample_problem_count() == 18, "there are 18 sample problems");
     check(sample_problem_get(-1) == NULL, "negative sample index returns NULL");
     check(sample_problem_get(sample_problem_count()) == NULL, "sample index past the end returns NULL");
 
@@ -506,7 +470,10 @@ static void test_sample_problems(void) {
         if (result == NULL) {
             continue;
         }
-        if (sample->expected_objective == NULL) {
+        if (sample->expected_objective == NULL && sample->is_infeasible) {
+            snprintf(description, sizeof(description), "sample '%s' is infeasible", sample->title);
+            check(result->status == SIMPLEX_INFEASIBLE, description);
+        } else if (sample->expected_objective == NULL) {
             snprintf(description, sizeof(description), "sample '%s' is unbounded", sample->title);
             check(result->status == SIMPLEX_UNBOUNDED, description);
         } else {

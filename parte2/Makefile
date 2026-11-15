@@ -86,7 +86,7 @@ TEST_REPORT = test_report
 REPORT_DIR ?= /tmp/test_report_output
 # Con libasan instalado: make test_report SANITIZE="-fsanitize=address,undefined"
 SANITIZE ?=
-PIPELINE_SOURCES = $(ENGINE_SOURCES) $(SRC_DIR)/latex_report.c $(SRC_DIR)/launcher.c
+PIPELINE_SOURCES = $(ENGINE_SOURCES) $(SRC_DIR)/latex_report.c $(SRC_DIR)/launcher.c $(SRC_DIR)/sample_problems.c
 
 $(TEST_REPORT): $(TEST_DIR)/test_report.c $(REFERENCE_SOURCES) $(PIPELINE_SOURCES) $(HEADERS) $(REFERENCE_HEADERS)
 	$(CC) $(WARNING_FLAGS) $(DEBUG_FLAGS) $(SANITIZE) -I$(SRC_DIR) -I$(TEST_DIR) $(GTK_CFLAGS) $(TEST_DIR)/test_report.c $(REFERENCE_SOURCES) $(PIPELINE_SOURCES) -o $@ $(GTK_LIBS) -lm

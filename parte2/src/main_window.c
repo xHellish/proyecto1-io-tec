@@ -29,12 +29,10 @@
 // Posicion de "Minimizar" en la lista del objetivo
 #define OBJECTIVE_MINIMIZE_INDEX 1
 
-// Columnas del modelo de la lista de relaciones: texto y si se puede elegir
-#define RELATION_TEXT_COLUMN 0
-#define RELATION_SENSITIVE_COLUMN 1
-
-// Posicion de cada relacion en la lista (la primera es la unica habilitada)
+// Posicion de cada relacion en la lista; coincide con el orden de ConstraintType
 #define RELATION_LESS_EQUAL_INDEX 0
+#define RELATION_GREATER_EQUAL_INDEX 1
+#define RELATION_EQUAL_INDEX 2
 
 // Posicion de "Maximizar" en la lista del objetivo
 #define OBJECTIVE_MAXIMIZE_INDEX 0
@@ -110,31 +108,39 @@ static GtkWidget *create_grid_label(int grid_column, int grid_row, const char *t
     return label;
 }
 
-// Crea el selector de relacion de una restriccion: ≤ habilitado; ≥ y = visibles pero deshabilitados
+// Crea el selector de relacion de una restriccion: ≤, ≥ o =, con ≤ por defecto
 static GtkWidget *create_relation_combo(int grid_column, int grid_row) {
-    const char *relation_texts[] = {"≤", "≥", "="};
-    GtkListStore *store = gtk_list_store_new(2, G_TYPE_STRING, G_TYPE_BOOLEAN);
-    GtkTreeIter iter;
-
-    // Una fila por relacion; solo la primera se puede elegir en esta version
-    for (int index = 0; index < 3; index++) {
-        gtk_list_store_append(store, &iter);
-        gtk_list_store_set(store, &iter, RELATION_TEXT_COLUMN, relation_texts[index], RELATION_SENSITIVE_COLUMN,
-                           index == RELATION_LESS_EQUAL_INDEX, -1);
-    }
-
-    // El renderer toma el texto y la sensibilidad de cada fila
-    GtkWidget *combo = gtk_combo_box_new_with_model(GTK_TREE_MODEL(store));
-    g_object_unref(store);
-    GtkCellRenderer *renderer = gtk_cell_renderer_text_new();
-    gtk_cell_layout_pack_start(GTK_CELL_LAYOUT(combo), renderer, TRUE);
-    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(combo), renderer, "text", RELATION_TEXT_COLUMN);
-    gtk_cell_layout_add_attribute(GTK_CELL_LAYOUT(combo), renderer, "sensitive", RELATION_SENSITIVE_COLUMN);
+    GtkWidget *combo = gtk_combo_box_text_new();
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "≤");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "≥");
+    gtk_combo_box_text_append_text(GTK_COMBO_BOX_TEXT(combo), "=");
     gtk_combo_box_set_active(GTK_COMBO_BOX(combo), RELATION_LESS_EQUAL_INDEX);
 
     gtk_widget_set_no_show_all(combo, TRUE);
     gtk_grid_attach(GTK_GRID(widgets.model_grid), combo, grid_column, grid_row, 1, 1);
     return combo;
+}
+
+// Posicion en la lista de relaciones de un tipo de restriccion
+static int relation_index_from_type(ConstraintType type) {
+    if (type == CONSTRAINT_GREATER_EQUAL) {
+        return RELATION_GREATER_EQUAL_INDEX;
+    }
+    if (type == CONSTRAINT_EQUAL) {
+        return RELATION_EQUAL_INDEX;
+    }
+    return RELATION_LESS_EQUAL_INDEX;
+}
+
+// Tipo de restriccion de una posicion de la lista de relaciones
+static ConstraintType constraint_type_from_relation(int relation_index) {
+    if (relation_index == RELATION_GREATER_EQUAL_INDEX) {
+        return CONSTRAINT_GREATER_EQUAL;
+    }
+    if (relation_index == RELATION_EQUAL_INDEX) {
+        return CONSTRAINT_EQUAL;
+    }
+    return CONSTRAINT_LESS_EQUAL;
 }
 
 // Crea todos los campos de la cuadricula en su tamano maximo (15 x 15)
@@ -204,7 +210,8 @@ static void fill_form_from_sample(const SampleProblem *sample) {
             gtk_entry_set_text(GTK_ENTRY(widgets.coefficient_entries[constraint][variable]),
                                sample_cell_text(sample->coefficients[constraint][variable]));
         }
-        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.relation_combos[constraint]), RELATION_LESS_EQUAL_INDEX);
+        gtk_combo_box_set_active(GTK_COMBO_BOX(widgets.relation_combos[constraint]),
+                                 relation_index_from_type(sample->constraint_types[constraint]));
         gtk_entry_set_text(GTK_ENTRY(widgets.right_hand_side_entries[constraint]),
                            sample_cell_text(sample->right_hand_sides[constraint]));
     }
@@ -274,14 +281,9 @@ static int build_problem_from_form(Problem *problem, char *message, size_t messa
                 return 0;
             }
         }
-        // Solo "≤" es elegible; cualquier otra relacion se rechaza con un mensaje claro
-        if (gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.relation_combos[constraint])) !=
-            RELATION_LESS_EQUAL_INDEX) {
-            snprintf(message, message_size, "Restricción %d: en esta versión solo se permite la relación ≤.",
-                     constraint + 1);
-            return 0;
-        }
-        problem->constraint_types[constraint] = CONSTRAINT_LESS_EQUAL;
+        // Relacion elegida para la restriccion
+        problem->constraint_types[constraint] = constraint_type_from_relation(
+            gtk_combo_box_get_active(GTK_COMBO_BOX(widgets.relation_combos[constraint])));
         snprintf(field_description, sizeof(field_description), "Restricción %d, lado derecho", constraint + 1);
         if (!read_number(widgets.right_hand_side_entries[constraint], field_description,
                          &problem->right_hand_sides[constraint], message, message_size)) {

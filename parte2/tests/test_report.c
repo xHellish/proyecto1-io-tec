@@ -134,6 +134,19 @@ static void test_reference_problems(void) {
     expect_compiles(&problem, "ref_breadco");
 }
 
+// Cada ejemplo del menu de la ventana (incluidos los de la Gran M, el no factible y el no acotado) compila
+static void test_sample_problems(void) {
+    Problem problem;
+    char name[64];
+
+    for (int index = 0; index < sample_problem_count(); index++) {
+        const SampleProblem *sample = sample_problem_get(index);
+        snprintf(name, sizeof(name), "sample_%02d", index);
+        check(build_problem_from_sample(sample, &problem), name, "the sample cannot be read");
+        expect_compiles(&problem, name);
+    }
+}
+
 // Problema no acotado: maximizar x1 + x2 con x1 - x2 <= 1 y x1 - 2x2 <= 2 (x1 puede crecer sin limite)
 static void test_unbounded(void) {
     Problem problem;
@@ -175,6 +188,39 @@ static void test_sizes(void) {
             fill_random_problem(&problem, sizes[index][0], sizes[index][1], objective_type);
             snprintf(name, sizeof(name), "size_%dx%d_%s", sizes[index][0], sizes[index][1], objective_label);
             expect_compiles(&problem, name);
+        }
+    }
+}
+
+// Tamanos extremos con restricciones >= o = (todas, y mezcladas), maximizando y minimizando
+static void test_big_m_sizes(void) {
+    int sizes[][2] = {{2, 2}, {15, 15}, {2, 15}, {15, 2}};
+    int size_count = (int)(sizeof(sizes) / sizeof(sizes[0]));
+    Problem problem;
+    char name[64];
+
+    srand(RANDOM_SEED);
+    for (int index = 0; index < size_count; index++) {
+        for (int mixed = 0; mixed < 2; mixed++) {
+            for (int objective = 0; objective < 2; objective++) {
+                fill_random_problem(&problem, sizes[index][0], sizes[index][1], (ObjectiveType)objective);
+
+                // Todas >= o una mezcla de <=, >= y =
+                for (int constraint = 0; constraint < sizes[index][1]; constraint++) {
+                    if (mixed == 0) {
+                        problem.constraint_types[constraint] = CONSTRAINT_GREATER_EQUAL;
+                    } else {
+                        problem.constraint_types[constraint] = (ConstraintType)(constraint % 3);
+                    }
+                }
+                const char *relation_label = "ge";
+                if (mixed == 1) {
+                    relation_label = "mix";
+                }
+                snprintf(name, sizeof(name), "bigm_%dx%d_%s_%d", sizes[index][0], sizes[index][1], relation_label,
+                         objective);
+                expect_compiles(&problem, name);
+            }
         }
     }
 }
@@ -291,7 +337,9 @@ int main(int argc, char **argv) {
 
     test_reference_problems();
     test_unbounded();
+    test_sample_problems();
     test_sizes();
+    test_big_m_sizes();
     test_problem_names();
     test_variable_names();
     test_huge_numbers();

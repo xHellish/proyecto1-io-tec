@@ -239,3 +239,40 @@ void build_class_degenerate(Problem *problem) {
     set_fraction(&problem->coefficients[2][1], 1, 1);
     set_fraction(&problem->right_hand_sides[2], 3, 1);
 }
+
+// Lee una celda de ejemplo como lo hace la ventana: NULL o vacia vale 0
+static int parse_sample_cell(const char *text, Fraction *value) {
+    if (text == NULL) {
+        *value = fraction_from_int(0);
+        return 1;
+    }
+    return fraction_parse(text, value) == FRACTION_OK;
+}
+
+// Arma el problema con los textos de un ejemplo del menu; devuelve 0 si alguna celda no se puede leer
+int build_problem_from_sample(const SampleProblem *sample, Problem *problem) {
+    int is_valid = 1;
+
+    problem_init(problem);
+    problem_set_sizes(problem, sample->variable_count, sample->constraint_count);
+    problem_set_name(problem, sample->name);
+    problem->objective_type = sample->objective_type;
+    for (int variable = 0; variable < sample->variable_count; variable++) {
+        if (!parse_sample_cell(sample->objective[variable], &problem->objective[variable])) {
+            is_valid = 0;
+        }
+    }
+    for (int constraint = 0; constraint < sample->constraint_count; constraint++) {
+        problem->constraint_types[constraint] = sample->constraint_types[constraint];
+        for (int variable = 0; variable < sample->variable_count; variable++) {
+            if (!parse_sample_cell(sample->coefficients[constraint][variable],
+                                   &problem->coefficients[constraint][variable])) {
+                is_valid = 0;
+            }
+        }
+        if (!parse_sample_cell(sample->right_hand_sides[constraint], &problem->right_hand_sides[constraint])) {
+            is_valid = 0;
+        }
+    }
+    return is_valid;
+}

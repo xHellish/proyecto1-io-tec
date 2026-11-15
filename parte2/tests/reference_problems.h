@@ -2,6 +2,7 @@
 #define REFERENCE_PROBLEMS_H
 
 #include "problem.h"
+#include "sample_problems.h"
 
 // Pesadilla de Dantzig (tarea de clase): 4 variables, 2 restricciones, lados derechos en 0
 void build_dantzig_nightmare(Problem *problem);
@@ -35,5 +36,9 @@ void build_class_multiple_solutions(Problem *problem);
 
 // Degenerado de clase: maximizar 2x1 + x2 con 3x1 + x2 <= 6, x1 - x2 <= 2 y x2 <= 3; Z = 5 en (1, 3)
 void build_class_degenerate(Problem *problem);
+
+// Arma el problema con los textos de un ejemplo del menu, como lo hace la ventana (una celda NULL vale 0);
+// devuelve 0 si alguna celda no se puede leer
+int build_problem_from_sample(const SampleProblem *sample, Problem *problem);
 
 #endif

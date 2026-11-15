@@ -13,7 +13,8 @@
 // ---------------------------------------------
 // Misma disposicion de la cuadricula que main_window.c
 #define FIRST_VARIABLE_COLUMN 1
-#define RIGHT_HAND_SIDE_COLUMN (FIRST_VARIABLE_COLUMN + MAX_VARIABLES + 1)
+#define RELATION_COLUMN (FIRST_VARIABLE_COLUMN + MAX_VARIABLES)
+#define RIGHT_HAND_SIDE_COLUMN (RELATION_COLUMN + 1)
 #define NAMES_ROW 0
 #define OBJECTIVE_ROW 1
 #define FIRST_CONSTRAINT_ROW 2
@@ -243,6 +244,12 @@ static void test_sample_menu(void) {
                                 sample->right_hand_sides[constraint])) {
                 cells_match = 0;
             }
+
+            // La relacion del selector coincide con la del ejemplo (la posicion es el orden de ConstraintType)
+            GtkWidget *relation = grid_entry(RELATION_COLUMN, FIRST_CONSTRAINT_ROW + constraint);
+            if (gtk_combo_box_get_active(GTK_COMBO_BOX(relation)) != (int)sample->constraint_types[constraint]) {
+                cells_match = 0;
+            }
         }
         snprintf(description, sizeof(description), "sample '%s' fills every cell and clears the rest", sample->title);
         check(cells_match, description);
@@ -252,7 +259,9 @@ static void test_sample_menu(void) {
         snprintf(description, sizeof(description), "sample '%s' solves without dialogs", sample->title);
         check(click_solve() == 0, description);
         const char *expected_status = simplex_status_message(SIMPLEX_OPTIMAL);
-        if (sample->expected_objective == NULL) {
+        if (sample->expected_objective == NULL && sample->is_infeasible) {
+            expected_status = simplex_status_message(SIMPLEX_INFEASIBLE);
+        } else if (sample->expected_objective == NULL) {
             expected_status = simplex_status_message(SIMPLEX_UNBOUNDED);
         }
         snprintf(description, sizeof(description), "sample '%s' has the expected status", sample->title);
@@ -262,6 +271,19 @@ static void test_sample_menu(void) {
     // Volver a la indicacion no cambia nada
     gtk_combo_box_set_active(GTK_COMBO_BOX(sample_combo), 0);
     check(click_solve() == 0, "placeholder keeps the last sample loaded");
+}
+
+// Los tres selectores de relacion se pueden elegir y el problema con ≥ y = se resuelve
+static void test_relation_selectors(void) {
+    set_sizes(3, 3);
+    fill_valid_data(3, 3);
+    gtk_entry_set_text(GTK_ENTRY(problem_name_entry), "Relations");
+    for (int constraint = 0; constraint < 3; constraint++) {
+        GtkWidget *relation = grid_entry(RELATION_COLUMN, FIRST_CONSTRAINT_ROW + constraint);
+        gtk_combo_box_set_active(GTK_COMBO_BOX(relation), constraint);
+        check(gtk_combo_box_get_active(GTK_COMBO_BOX(relation)) == constraint, "relation selector accepts its option");
+    }
+    check(click_solve() == 0, "problem with <=, >= and = solves without dialogs");
 }
 
 // =============================================
@@ -308,6 +330,7 @@ int main(int argc, char **argv) {
     test_repeated_clicks();
     test_problem_names();
     test_sample_menu();
+    test_relation_selectors();
 
     printf("%d checks run, %d failed, %d dialogs closed\n", checks_run, checks_failed, dialogs_closed);
     if (checks_failed > 0) {

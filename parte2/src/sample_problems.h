@@ -18,11 +18,15 @@ typedef struct {
     int constraint_count;
     const char *objective[MAX_VARIABLES];
     const char *coefficients[MAX_CONSTRAINTS][MAX_VARIABLES];
+    // Relacion de cada restriccion; sin escribirla vale ≤
+    ConstraintType constraint_types[MAX_CONSTRAINTS];
     const char *right_hand_sides[MAX_CONSTRAINTS];
     // Resultado del cuaderno para comparar con el PDF
     const char *expected;
-    // Z optimo como texto de fraccion; NULL si el problema es no acotado
+    // Z optimo como texto de fraccion; NULL si el problema no tiene optimo (no acotado o no factible)
     const char *expected_objective;
+    // 1 si el problema no tiene region factible (solo con expected_objective NULL)
+    int is_infeasible;
 } SampleProblem;
 
 // =============================================

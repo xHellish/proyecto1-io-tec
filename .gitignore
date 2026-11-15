@@ -74,6 +74,7 @@ simplex_asan
 test_model
 test_simplex
 test_bigm
+test_geometry
 ui_test
 test_report
 test_gui

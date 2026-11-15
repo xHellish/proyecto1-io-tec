@@ -3,6 +3,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "latex_text.h"
+#include "plots.h"
+
 // =============================================
 // Constants
 // ---------------------------------------------
@@ -35,18 +38,6 @@ static const char *STUDENT_NAMES[] = {
 // =============================================
 // Text helpers
 // ---------------------------------------------
-
-static void append_fraction(GString *output, Fraction value) {
-    if (value.denominator == 1) {
-        g_string_append_printf(output, "%lld", value.numerator);
-        return;
-    }
-    if (value.numerator < 0) {
-        g_string_append_printf(output, "-\\frac{%lld}{%lld}", -value.numerator, value.denominator);
-        return;
-    }
-    g_string_append_printf(output, "\\frac{%lld}{%lld}", value.numerator, value.denominator);
-}
 
 static void append_escaped(GString *output, const char *text) {
     for (const char *cursor = text; *cursor != '\0'; cursor++) {
@@ -116,7 +107,7 @@ static void append_objective_value(GString *output, const Table *table, int colu
 
     // Sin M es un numero normal
     if (fraction_sign(m_part) == 0) {
-        append_fraction(output, constant);
+        latex_append_fraction(output, constant);
         return;
     }
 
@@ -126,17 +117,17 @@ static void append_objective_value(GString *output, const Table *table, int colu
     } else if (m_part.numerator == -1 && m_part.denominator == 1) {
         g_string_append(output, "-M");
     } else {
-        append_fraction(output, m_part);
+        latex_append_fraction(output, m_part);
         g_string_append(output, "M");
     }
 
     // Constante con su signo; si es 0 no se escribe
     if (fraction_sign(constant) > 0) {
         g_string_append(output, " + ");
-        append_fraction(output, constant);
+        latex_append_fraction(output, constant);
     } else if (fraction_sign(constant) < 0) {
         g_string_append(output, " - ");
-        append_fraction(output, fraction_negate(constant));
+        latex_append_fraction(output, fraction_negate(constant));
     }
 }
 
@@ -191,7 +182,7 @@ static void append_preamble(GString *output, const Problem *problem) {
                     "\\usepackage{amsmath,graphicx,array,fancyhdr}\n"
                     "\\usepackage[table]{xcolor}\n"
                     "\\usepackage{tikz}\n"
-                    "\\usetikzlibrary{arrows.meta,shadows}\n"
+                    "\\usetikzlibrary{arrows.meta,shadows,shapes.geometric}\n"
                     "\n"
                     "\\definecolor{tecblue}{RGB}{0,41,84}\n"
                     "\\definecolor{tecred}{RGB}{228,0,43}\n"
@@ -202,6 +193,14 @@ static void append_preamble(GString *output, const Problem *problem) {
                     "\\definecolor{pivot}{RGB}{255,206,84}\n"
                     "\\definecolor{okgreen}{RGB}{24,128,72}\n"
                     "\\definecolor{warnorange}{RGB}{204,102,0}\n"
+                    "\\definecolor{plotc1}{RGB}{0,114,178}\n"
+                    "\\definecolor{plotc2}{RGB}{230,159,0}\n"
+                    "\\definecolor{plotc3}{RGB}{0,158,115}\n"
+                    "\\definecolor{plotc4}{RGB}{204,121,167}\n"
+                    "\\definecolor{plotc5}{RGB}{86,150,200}\n"
+                    "\\definecolor{plotc6}{RGB}{213,94,0}\n"
+                    "\\definecolor{plotc7}{RGB}{120,120,30}\n"
+                    "\\definecolor{plotc8}{RGB}{90,90,90}\n"
                     "\n"
                     "\\setlength{\\parindent}{0pt}\n"
                     "\\hyphenpenalty=10000\n"
@@ -444,7 +443,7 @@ static void append_model_row(GString *output, const Problem *problem, const Frac
         }
         if (magnitude.numerator != 1 || magnitude.denominator != 1) {
             g_string_append(output, "$");
-            append_fraction(output, magnitude);
+            latex_append_fraction(output, magnitude);
             g_string_append(output, "\\,$");
         }
         g_string_append(output, problem->variable_names[variable]);
@@ -485,7 +484,7 @@ static void append_problem(GString *output, const Problem *problem) {
         } else {
             g_string_append(output, " & $\\leq$ & $");
         }
-        append_fraction(output, problem->right_hand_sides[constraint]);
+        latex_append_fraction(output, problem->right_hand_sides[constraint]);
         g_string_append(output, "$ \\\\\n");
     }
 
@@ -575,7 +574,7 @@ static void append_table(GString *output, const Problem *problem, const Step *st
             }
             if (row == leaving_row && column == entering_column) {
                 g_string_append(output, "\\pivotcell{$");
-                append_fraction(output, table->cells[row][column]);
+                latex_append_fraction(output, table->cells[row][column]);
                 g_string_append(output, "$}");
             } else if (row == 0) {
                 g_string_append(output, "$");
@@ -583,7 +582,7 @@ static void append_table(GString *output, const Problem *problem, const Step *st
                 g_string_append(output, "$");
             } else {
                 g_string_append(output, "$");
-                append_fraction(output, table->cells[row][column]);
+                latex_append_fraction(output, table->cells[row][column]);
                 g_string_append(output, "$");
             }
         }
@@ -592,11 +591,11 @@ static void append_table(GString *output, const Problem *problem, const Step *st
             g_string_append(output, " & ");
             if (row > 0 && step->ratio_is_valid[row - 1]) {
                 g_string_append(output, "$");
-                append_fraction(output, table->cells[row][right_hand_side_column]);
+                latex_append_fraction(output, table->cells[row][right_hand_side_column]);
                 g_string_append(output, " \\div ");
-                append_fraction(output, table->cells[row][entering_column]);
+                latex_append_fraction(output, table->cells[row][entering_column]);
                 g_string_append(output, " = ");
-                append_fraction(output, step->ratios[row - 1]);
+                latex_append_fraction(output, step->ratios[row - 1]);
                 g_string_append(output, "$");
                 if (row == leaving_row) {
                     g_string_append(output, "\\ \\leavearrow");
@@ -647,7 +646,7 @@ static void append_decisions(GString *output, const Problem *problem, const Step
         g_string_append(output, "\\enspace\\chip{leaving}{Sale \\textbf{");
         append_column_label(output, problem, table, table->basis[step->leaving_constraint]);
         g_string_append(output, "}}\\enspace\\chip{pivot}{Pivote $");
-        append_fraction(output, step->pivot);
+        latex_append_fraction(output, step->pivot);
         g_string_append(output, "$}");
     }
     g_string_append(output, "\\par\n{\\footnotesize\\color{textgray}");
@@ -659,7 +658,7 @@ static void append_decisions(GString *output, const Problem *problem, const Step
         append_column_label(output, problem, table, table->basis[step->leaving_constraint]);
         g_string_append_printf(output, " sale porque la restricción %d tiene la fracción mínima ($",
                                step->leaving_constraint + 1);
-        append_fraction(output, step->ratios[step->leaving_constraint]);
+        latex_append_fraction(output, step->ratios[step->leaving_constraint]);
         g_string_append(output, "$).");
         if (step->tied_row_count > 1) {
             g_string_append_printf(output, " {\\color{tecred}Empate entre %d filas:} sale la variable básica de "
@@ -802,7 +801,7 @@ static void append_history(GString *output, const Problem *problem, const Simple
 static void append_objective_badge(GString *output, Fraction objective_value) {
     g_string_append(output, "\\begin{center}\\tikz\\node[fill=tecblue,text=white,rounded corners=4pt,"
                             "drop shadow={opacity=0.12},inner xsep=12pt,inner ysep=7pt]{\\Large $Z^{*} = ");
-    append_fraction(output, objective_value);
+    latex_append_fraction(output, objective_value);
     g_string_append(output, "$};\\end{center}\n");
 }
 
@@ -826,7 +825,7 @@ static void append_values(GString *output, const Problem *problem, const Fractio
                             "\\multicolumn{3}{l}{\\color{tecblue}\\bfseries Variables de decisión} \\\\\n");
     for (int variable = 0; variable < problem->variable_count; variable++) {
         g_string_append_printf(output, "%s & $=$ & $", problem->variable_names[variable]);
-        append_fraction(output, variable_values[variable]);
+        latex_append_fraction(output, variable_values[variable]);
         g_string_append(output, "$ \\\\\n");
     }
     g_string_append(output, "\\end{tabular}");
@@ -853,7 +852,7 @@ static void append_values(GString *output, const Problem *problem, const Fractio
                 problem_slack_name(constraint, auxiliary_name, NAME_BUFFER_SIZE);
             }
             g_string_append_printf(output, "%s & $=$ & $", auxiliary_name);
-            append_fraction(output, slack_values[constraint]);
+            latex_append_fraction(output, slack_values[constraint]);
             g_string_append(output, "$ \\\\\n");
         }
         g_string_append(output, "\\end{tabular}");
@@ -880,7 +879,7 @@ static void append_infeasible(GString *output, const Problem *problem, const Ste
         }
         append_column_label(output, problem, table, column);
         g_string_append(output, " $= ");
-        append_fraction(output, table->cells[constraint + 1][right_hand_side_column]);
+        latex_append_fraction(output, table->cells[constraint + 1][right_hand_side_column]);
         g_string_append(output, "$");
         is_first = 0;
     }
@@ -934,7 +933,7 @@ static void append_column_vector(GString *output, const Fraction values[], int v
         if (variable > 0) {
             g_string_append(output, " \\\\ ");
         }
-        append_fraction(output, values[variable]);
+        latex_append_fraction(output, values[variable]);
     }
     g_string_append(output, "\\end{pmatrix}");
 }
@@ -962,7 +961,7 @@ static void append_extra_points(GString *output, const Problem *problem, const S
             continue;
         }
         g_string_append(output, "$");
-        append_fraction(output, parameter);
+        latex_append_fraction(output, parameter);
         g_string_append(output, "$");
         if (simplex_alternative_point(result, problem->variable_count, parameter, values) != SIMPLEX_RUNNING) {
             g_string_append_printf(output, " & \\multicolumn{%d}{c}{El punto no se puede representar de forma "
@@ -972,7 +971,7 @@ static void append_extra_points(GString *output, const Problem *problem, const S
         }
         for (int variable = 0; variable < problem->variable_count; variable++) {
             g_string_append(output, " & $");
-            append_fraction(output, values[variable]);
+            latex_append_fraction(output, values[variable]);
             g_string_append(output, "$");
         }
         g_string_append(output, " \\\\\n");
@@ -1003,7 +1002,7 @@ static void append_multiple_solutions(GString *output, const Problem *problem, c
         append_table(output, problem, &second_step, TABLE_HEIGHT_WITH_TEXT);
         g_string_append(output, "\\vspace{1mm}\\chip{okgreen!20}{\\color{okgreen}\\bfseries Segunda solución "
                                 "óptima}\\enspace{\\small con el mismo $Z^{*} = ");
-        append_fraction(output, result->objective_value);
+        latex_append_fraction(output, result->objective_value);
         g_string_append(output, "$}\\par\n");
 
         g_string_append(output, "\\slide{Segunda solución}\n");
@@ -1098,6 +1097,10 @@ int latex_report_write(const char *path, const Problem *problem, const SimplexRe
     append_solution(output, problem, result);
     if (result->status == SIMPLEX_OPTIMAL && result->multiple_kind != MULTIPLE_NONE) {
         append_multiple_solutions(output, problem, result);
+    }
+    // Extra: con 2 variables, gráfico de las restricciones y la región factible
+    if (problem->variable_count == 2) {
+        plots_append_region_2d(output, problem, result);
     }
     if (result->is_degenerate) {
         append_degenerate(output, result);

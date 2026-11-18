@@ -457,7 +457,7 @@ void plots_append_region_2d(GString *output, const Problem *problem, const Simpl
         sort_around_center(polygon, polygon_count);
     }
 
-    g_string_append(output, "\\slide{Gráfico de la región factible}\n"
+    g_string_append(output, "Gráfico de la región factible\n"
                             "\\begin{lrbox}{\\fitbox}\\begin{tabular}{@{}c@{\\hspace{4mm}}c@{}}\n"
                             "\\begin{tikzpicture}\n");
 
@@ -727,7 +727,7 @@ void plots_append_body_3d(GString *output, const Problem *problem, const Simplex
         scale = PLOT_3D_HEIGHT_CM / drawing_height;
     }
 
-    g_string_append(output, "\\slide{Cuerpo Símplex tridimensional}\n"
+    g_string_append(output, "Cuerpo Símplex tridimensional\n"
                             "\\begin{lrbox}{\\fitbox}\\begin{tabular}{@{}c@{\\hspace{4mm}}c@{}}\n"
                             "\\begin{tikzpicture}\n");
 
